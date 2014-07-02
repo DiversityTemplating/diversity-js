@@ -1,0 +1,330 @@
+(function($){
+
+  var idCount = 0;
+
+  var join = function(base,url) {
+    if (url.indexOf('http') === 0 || url.indexOf('//') === 0) {
+      return url;
+    }
+    return base + url;
+  };
+
+
+  var renderMustache = function(template,context) {
+    context = context || {};
+
+    //Add the lambdas we need
+    context.lang = function() {
+      return function(txt,render) {
+        return render('{{=[[ ]]=}}'+txt.replace(/lang/g,'sv'));
+      };
+    };
+    context.currency =  function() {
+      return function(txt,render) {
+        return render('{{=[[ ]]=}}'+txt.replace(/currency/g,'SEK'));
+      };
+    };
+    context.gettext =  function() {
+      return function(txt,render) {
+        return render('{{=[[ ]]=}}'+txt);
+      };
+    };
+
+    return Mustache.render(template,context);
+  };
+
+
+  var loadConfig = function(urls,configs,options,done) {
+    var path = urls.shift();
+
+    $.getJSON(path,function(config){
+      configs[config.name] = config;
+
+      angular.forEach(config.dependencies,function(version,name){
+        if (!configs[name]) {
+          urls.push(options.root+name+'/diversity.json');
+        }
+      });
+
+      //Recurse and load the next
+      if (urls.length > 0) {
+        loadConfig(urls,configs,options,done);
+      } else {
+        //we're done!
+        done();
+      }
+    });
+  };
+
+  //Load lots of json files recursively
+  var loadAll = function(firstUrl,next,done) {
+    if (angular.isString(firstUrl)) {
+      firstUrl = [firstUrl];
+    }
+
+    var results = [];
+    var loadAllInner = function(urls,next,done) {
+      var path = urls.shift();
+      console.log('ajax',path)
+      $.ajax(path,{
+        type: 'GET',
+        dataType: 'text',
+        success: function(data){
+          results.push(data);
+
+          var n = next(path,data);
+          if (angular.isString(n)) {
+            urls.push(n);
+          } else if (angular.isArray(n)) {
+            urls = urls.concat(n);
+          }
+        },
+        error: function(){ console.log('fail',arguments); },
+        complete: function(){
+          if (urls.length > 0) {
+            loadAllInner(urls,next,done);
+          } else {
+            done(results);
+          }
+        }
+      });
+    };
+
+    loadAllInner(firstUrl,next,done);
+  };
+
+
+/*
+
+        //We append scripts in the correct order
+        //FIXME: probably not the best way to do it.
+        frag = document.createDocumentFragment();
+        angular.forEach(scripts,function(url){
+          var script = document.createElement('script');
+          script.setAttribute('type','text/javascript');
+          script.innerHTML = cache[url];
+          frag.appendChild(script);
+          console.log(url);
+        });
+
+*/
+  //We need to load scripts in the correct order, therefore we do it synced
+  //probably doesn't work in ie.
+  var loadScripts = function(scripts,allDone) {
+    if (!scripts || scripts.length === 0) {
+      allDone();
+      return;
+    }
+
+    var url = scripts.shift();
+    var script = document.createElement('script');
+    script.setAttribute('type','text/javascript');
+    script.onload = function(){
+      //script onload!
+      console.log('onload',url);
+      loadScripts(scripts,allDone);
+    };
+    script.onerror = function(){
+      console.log('onerror',url);
+      loadScripts(scripts,allDone);
+    };
+    script.src = url;
+    document.head.appendChild(script);
+  };
+
+
+
+
+  $.fn.diversity = function(name,options) {
+    options = $.extend({
+      root: '',
+      locale: 'sv',
+      backend: 'https://davidstage.textalk.se/backend/jsonrpc/v1/',
+      context:  {
+        webshop: 11011,
+        languageCode: 'sv',
+        currencyCode: 'SEK'
+      }
+    },options);
+    var target = this[0];
+
+    //we need an id on target
+    if (!target.id) {
+      target.id = 'diversity-component-'+name+'-' + idCount++;
+    }
+
+    //Prepare global object for preloaded data, mostly translations
+    window.tws = window.tws || {};
+    window.tws.data = window.tws.data || {};
+
+    //Start by loading all resources except scripts and CSS and cache them
+    //This means all dependant components, all tranlations and all mustache
+    //templates
+    var cache = {};
+    var configs = {};
+    loadAll(
+      options.root+name+'/diversity.json',
+      function(path,data){
+        cache[path] = data;
+
+        if (/diversity.json$/.test(path)) {
+          if (angular.isString(data)) {
+            data = JSON.parse(data);
+          }
+          var config = data;
+          configs[config.name] = config;
+          var basePath = options.root + config.name + '/';
+
+          var urls = [];
+          angular.forEach(config.dependencies,function(version,name){
+            urls.push(options.root+name+'/diversity.json');
+          });
+
+          if (angular.isString(config.template)) {
+            urls.push(basePath+config.template);
+          } else {
+            angular.forEach(config.template,function(template){
+              urls.push(basePath+template);
+            });
+          }
+
+          /*if (angular.isString(config.script)) {
+            urls.push(basePath+config.script);
+          } else {
+            angular.forEach(config.script,function(script){
+              urls.push(basePath+script);
+            });
+          }*/
+
+          if (config.i18n && config.i18n[options.locale] && config.i18n[options.locale].view){
+            urls.push(basePath+config.i18n[options.locale].view);
+          }
+
+          //filter out already loaded urls
+          urls = urls.filter(function(url){ return !cache[url]; });
+
+          return urls;
+        }
+      },
+      function(){
+        //Everything is loaded now. OK. lets traverse the dependency tree and
+        //load scripts and css, and why not parse some mustach?
+        var config  = configs[name];
+        var scripts = [];
+        var styles  = [];
+        var done    = {};
+        var bottomsup = function(component) {
+          //bail out if this component is already loaded
+          //i.e. several components depend on the same base component (tws-api)
+          if (done[component.name]) {
+            return;
+          }
+
+          //Do any dependencies first.
+          angular.forEach(component.dependencies,function(version,name){
+            bottomsup(configs[name]);
+          });
+          var baseUrl = options.root+component.name+'/';
+          options.context.baseUrl = baseUrl;
+          //Add styles, we need this to get the order right
+          if (angular.isString(component.script)) {
+            scripts.push(join(baseUrl,component.script));
+          } else {
+            angular.forEach(component.script,function(url){
+              scripts.push(join(baseUrl,url));
+            });
+          }
+
+          if (angular.isString(component.style)) {
+            styles.push(join(baseUrl,component.style));
+          } else {
+            angular.forEach(component.style,function(url){
+              styles.push(join(baseUrl,url));
+            });
+          }
+
+          //FIXME: support more than swedish
+          if (component.i18n && component.i18n.sv && component.i18n.sv.view) {
+            var po = cache[join(baseUrl,component.i18n.sv.view)];
+            if (po) {
+              //Might be initialized in template, might not.
+              if (!window.tws.data[component.name]) {
+                window.tws.data[component.name] = {};
+              }
+              window.tws.data[component.name].messages = JSON.parse(po);
+              console.log(window.tws.data[component.name].messages);
+            }
+          }
+
+          //mark as done!
+          done[component.name] = true;
+        };
+        bottomsup(config);
+
+        //now let's create some tags
+        var frag = document.createDocumentFragment();
+
+        angular.forEach(styles,function(style){
+          var link = document.createElement('link');
+          link.setAttribute('rel','stylesheet');
+          link.setAttribute('href',style);
+          frag.appendChild(link);
+        });
+
+        //Then add them to head
+        $('head')[0].appendChild(frag);
+
+
+        console.log('Loading scripts');
+        loadScripts(scripts,function(){
+          //All scripts have loaded, let's render and boostrap
+
+          //We only render template for top component
+          //TODO: make API requests
+          //TODO: get params
+          //TODO: pageTypes
+          //TODO: template choice
+          if (config.template) {
+            var template = config.template;
+            if (angular.isArray(config.template)) {
+              template = config.template[0];
+            }
+            var html = renderMustache(cache[options.root+config.name+'/'+template],options.context);
+            target.innerHTML = html;
+          }
+
+          //We append bootstrap code as a script tag below the others, so it's executed whenever the
+          //other scripts has loaded.
+          //TODO support more than one component on a page
+          if (config.angular) {
+            var frag = document.createDocumentFragment();
+            var bootstrap = document.createElement('script');
+            bootstrap.setAttribute('type','text/javascript');
+
+            var setup = [
+            "console.log('bootstrap')",
+            "angular.module('diversity',['"+config.angular+"'])",
+                  ".constant('shopId','"+options.context.webshop+"')",
+                  ".config(['twsJsonRpcClientProvider','twsSessionProvider','twsJedProvider','shopId',",
+                  "function(twsJsonRpcClientProvider,  twsSessionProvider,  twsJedProvider,  shopId){",
+                  " twsJsonRpcClientProvider.set(",
+                  "     'ajaxUrl',               ",
+                  "     '"+options.backend+"?webshop='+shopId",
+                  "   );",
+                  " if (window.localStorage) {",
+                  "     twsSessionProvider.setSessionId(localStorage.getItem('tws.sessionId'));",
+                  " }",
+                  " twsSessionProvider.setResetJsonRpcOnSession(true);",
+                  "}]);",
+                  'angular.bootstrap(document.body,["diversity"]);'
+            ];
+            bootstrap.innerHTML = setup.join('\n');
+            frag.appendChild(bootstrap);
+            target.appendChild(frag);
+          }
+        });
+
+      });
+  };
+
+})(jQuery);
