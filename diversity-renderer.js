@@ -298,7 +298,7 @@
             "console.log('bootstrap')",
             "angular.module('diversity',['"+config.angular+"'])",
                   ".constant('shopId','"+options.context.webshop+"')",
-                  ".config(['twsJsonRpcClientProvider','twsSessionProvider','twsJedProvider','shopId',",
+                  ".config(['twsApi.JsonRpcClientProvider','twsApi.SessionProvider','twsApi.JedProvider','shopId',",
                   "function(twsJsonRpcClientProvider,  twsSessionProvider,  twsJedProvider,  shopId){",
                   " twsJsonRpcClientProvider.set(",
                   "     'ajaxUrl',               ",
