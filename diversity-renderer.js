@@ -203,6 +203,12 @@
         var scripts = [];
         var styles  = [];
         var done    = {};
+
+        // Sanity check.
+        if (!config) {
+          throw Error('No component by name: ' + name);
+        }
+
         var bottomsup = function(component) {
           //bail out if this component is already loaded
           //i.e. several components depend on the same base component (tws-api)
@@ -294,6 +300,7 @@
             var bootstrap = document.createElement('script');
             bootstrap.setAttribute('type', 'text/javascript');
 
+            /* jscs: disable */
             var setup = [
             "console.log('bootstrap')",
             "angular.module('diversity',['"+config.angular+"'])",
@@ -311,6 +318,7 @@
                   "}]);",
                   'angular.bootstrap(document.body,["diversity"]);'
             ];
+            /* jscs: enable */
             bootstrap.innerHTML = setup.join('\n');
             frag.appendChild(bootstrap);
             target.appendChild(frag);

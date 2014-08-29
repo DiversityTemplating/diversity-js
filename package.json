@@ -1,0 +1,25 @@
+{
+  "name": "diversity-js",
+  "version": "0.1.0",
+  "description": "Diversity Renderer for browser and node",
+  "main": "diversity-server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DiversityTemplating/diversity-js.git"
+  },
+  "author": "David Jensen (david.lgj@gmail.com)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/DiversityTemplating/diversity-js/issues"
+  },
+  "homepage": "https://github.com/DiversityTemplating/diversity-js",
+  "dependencies": {
+    "express": "^4.8.6",
+    "mustache": "^0.8.2",
+    "q": "^1.0.1",
+    "q-io": "^1.11.4"
+  }
+}
