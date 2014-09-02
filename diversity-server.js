@@ -68,6 +68,8 @@ var updateDependency = function(name, value) {
 
 /**
  * Clone or git pull all dependencies in diversity.json into test/deps/
+ * @param {string} name
+ * @return {Promise} resolves to an object of diversity.json files.
  */
 var updateDeps = function(name) {
   if (!exists(DEPS_FOLDER)) {
@@ -84,7 +86,9 @@ var updateDeps = function(name) {
     )
   );
 
+  var components = {};
   var loadAndUpdate = function(name) {
+
     var pth = path.join(
       process.cwd(),
       DEPS_FOLDER,
@@ -93,6 +97,7 @@ var updateDeps = function(name) {
     );
     return fs.read(pth).then(parseJSON).then(function(diversity) {
       var promises = [];
+      components[diversity.name] = diversity;
 
       console.log('Load and update ', pth);
       if (!diversity.dependencies || Object.keys(diversity.dependencies).length === 0) {
@@ -113,9 +118,10 @@ var updateDeps = function(name) {
   };
 
   // First load base component
-  updateDependency(name).then(loadAndUpdate);
+  promises.push(updateDependency(name).then(loadAndUpdate));
 
-  return Q.all(promises);
+  // Make sure to return the object with all diversity.json files
+  return Q.all(promises).then(function() { return components; });
 };
 
 
@@ -137,6 +143,7 @@ var renderMustache = function(template, context) {
       return render('{{=[[ ]]=}}' + txt);
     };
   };
+
   return Mustache.render(template, context);
 };
 
@@ -147,48 +154,114 @@ var parseJSON = function(data) {
     return Q.reject('Error parsing JSON');
   }
 };
+//
+// var findComponentsInSettings = function(settings) {
+//   var names = []; // Names are a list of component names we need to load.
+//   var compSettings = {};
+//
+//   if (settings.settings) {
+//     var traverse = function(obj) {
+//       if (Array.isArray(obj)) {
+//         obj.forEach(traverse);
+//         return;
+//       }
+//       // An object is a component data settings if it has the attribute component  and its a string
+//       if (obj.component && typeof obj.component === 'string') {
+//         // Skip it if we're already found it.
+//         if (!compSettings[obj.component]) {
+//           name.push(obj.component);
+//           compSettings[obj.component] = obj;
+//         }
+//       }
+//     };
+//     traverse(settings.settings);
+//   }
+//
+//   return {
+//     name: names,
+//     settings: compSettings
+//   };
+// };
 
-var load = function(comp, comps) {
-  var promises = [];
-  if (comp.dependencies) {
-    // We don't handle version numbers right now
-    Object.keys(comp.dependencies).forEach(function(name) {
-      if (!comps[name]) {
-        console.log('Loading', name);
-        var p = fs.read(DEPS_FOLDER + name + '/diversity.json')
-                 .then(parseJSON)
-                 .then(function(c) {
-                   comps[name] = c;
-                   return load(c, comps);
-                 });
-        promises.push(p);
-      }
-    });
+var findComponentsInSettings = function(settings, fn) {
+  if (!settings) {
+    return;
   }
-  return Q.all(promises);
+  var traverse = function(obj) {
+    console.log('Traverse ',obj)
+    if (Array.isArray(obj)) {
+      obj.forEach(traverse);
+      return;
+    }
+
+    // Lets traverse all properties as well
+    if (Object.isObject(obj)) {
+      Object.keys(obj).forEach(function(key) {
+        traverse(obj[key]);
+      });
+    }
+
+    // An object is a component data settings if it has the attribute component  and its a string
+    if (obj && obj.component && typeof obj.component === 'string') {
+      fn(obj);
+    }
+  };
+  traverse(settings);
 };
 
-var deps = function(comp, fn) {
-  var comps = {};
-  comps[comp.name] = comp;
 
-  return load(comp, comps).then(function() {
+
+
+
+
+//
+// var load = function(comp, comps) {
+//   var promises = [];
+//   if (comp.dependencies) {
+//     // We don't handle version numbers right now
+//     Object.keys(comp.dependencies).forEach(function(name) {
+//       if (!comps[name]) {
+//         console.log('Loading', name);
+//         var p = fs.read(DEPS_FOLDER + name + '/diversity.json')
+//                  .then(parseJSON)
+//                  .then(function(c) {
+//                    comps[name] = c;
+//                    return load(c, comps);
+//                  });
+//         promises.push(p);
+//       }
+//     });
+//   }
+//   return Q.all(promises);
+// };
+
+/**
+ * Traverses the dependeny tree of components depth first and
+ * applies a function to all steps.
+ * @param {Array} names a list of component names that are roots
+ * @param {Object} defs object with all diversity.json definitions
+ * @param {Function} fn a function to apply
+ */
+var traverseDeps = function(names, defs, fn) {
+  names.forEach(function(name) {
     // Let's traverse and apply the apply function on each comp.
     // Depth first.
     var traverse = function(comp) {
+      if (comp.done) {
+        return;
+      }
 
       fn(comp);
       comp.done = true;
       if (comp.dependencies) {
-        Object.keys(comp.dependencies).forEach(function(name) {
-          var c = comps[name];
-          if (c && !c.done) {
-            traverse(c);
+        Object.keys(comp.dependencies).forEach(function(n) {
+          if (defs[n]) {
+            traverse(defs[n]);
           }
         });
       }
     };
-    traverse(comp);
+    traverse(defs[name]);
   });
 };
 
@@ -197,22 +270,52 @@ app.get('/', function(req, res) {
   // We update dependencies and load diversity.json each time so we always pick up changes.
   // This is for development people!
   var name = process.argv[2];
-  updateDeps(name).then(function() {
-    return Q.all([
 
-      fs.read(path.join(
-        process.cwd(),
-        DEPS_FOLDER,
-        name,
-        'diversity.json'
-      )).then(parseJSON),
+  // Mock settings from file
+  fs.read(path.join(
+    process.cwd(),
+    DEPS_FOLDER,
+    name,
+    'settings.json'
+  )).then(parseJSON).then(function(settings) {
+    console.log(settings);
+    // We want to load the supplied theme + any components in it's settins
+    var promises = [];
 
-      // Mock settings from file
-      fs.read('settings.json').then(parseJSON)
+    promises.push(updateDeps(name));
 
-    ]).then(function(result) {
-      var def = result[0];
-      //var settings = result[1];
+    var settingsComponents = {};
+    findComponentsInSettings(settings, function(c) {
+      settingsComponents[c.component] = true;
+    });
+
+    Object.keys(settingsComponents).forEach(function(n) {
+      promises.push(updateDeps(n));
+    });
+
+    return Q.all(promises).then(function(result) {
+      var defs = result.reduce(function(soFar, obj) {
+        Object.keys(obj).forEach(function(k) {
+          if (obj[k] !== undefined) {
+            soFar[k] = obj[k];
+          }
+        });
+        return soFar;
+      }, {});
+
+      var createContext = function() {
+        return {
+          scripts: [],
+          styles: [],
+          modules: [],
+          context: {
+            'webshop_uid':  11011,
+            'backend_url': 'davidstage.textalk.se/backend/jsonrpc/v1/',
+            'webshop_url': 'http://shop.humle.se',
+          }
+        };
+      };
+
       var prefix = function(name, url) {
         if (url.indexOf('//') === 0 ||
             url.indexOf('http://') === 0 ||
@@ -223,26 +326,44 @@ app.get('/', function(req, res) {
         return path.join(DEPS_FOLDER, name, url);
       };
 
-      return fs.read(
-        path.join(
-          process.cwd(),
-          DEPS_FOLDER,
-          def.name,
-          def.template
-        )
-      ).then(function(template) {
-        var context = {
-          scripts: [],
-          styles: [],
-          modules: [],
-          context: {
-            'webshop_uid':  11011,
-            'backend_url': 'davidstage.textalk.se/backend/jsonrpc/v1/',
-            'webshop_url': 'http://shop.humle.se.davidstage.textalk.se',
-          }
-        };
+      var renderList = [];
+      var templates = [];
 
-        return deps(def, function(comp) {
+      findComponentsInSettings(settings, function(obj) {
+        // findComponentsInSettings goes depth first and applies children before parents
+        var def = defs[obj.component];
+        if (def.template) {
+          // FIXME: alternative templates
+          templates.push(fs.read(path.join(
+            process.cwd(),
+            DEPS_FOLDER,
+            def.name,
+            def.template
+          )));
+          renderList.push(obj);
+        }
+      });
+
+      console.log('And the renderlist is!',renderList)
+
+      // Load all templates
+      return Q.all(templates).then(function(templateData) {
+
+        // Render mustache templates for each in the list.
+        renderList.forEach(function(obj, i) {
+
+          var c = createContext();
+          c.settings = obj.settings;
+          console.log('Rendering html for component ', obj.component);
+          obj.componentHTML = renderMustache(templateData[i], c);
+          console.log(obj.componentHTML);
+        });
+
+        var context = createContext();
+        var names = Object.keys(settingsComponents);
+        names.unshift(name);
+
+        traverseDeps(names, defs, function(comp) {
           if (typeof comp.style === 'string') {
             context.styles.unshift(prefix(comp.name, comp.style));
           } else if (typeof comp.style !== 'undefined') {
@@ -260,16 +381,125 @@ app.get('/', function(req, res) {
           }
 
           if (comp.angular) {
-            context.modules.push(comp.angular);
+            context.modules[comp.angular] = true;
           }
+        });
 
-        }).then(function() {
-          context.angularBootstrap = 'angular.module("tws",["' + context.modules.join('","') +
-                                      '"])\n' + 'angular.bootstrap(document,["tws"])';
+        context.settings = settings;
+        context.settingsJSON = JSON.stringify(settings);
+
+        context.angularBootstrap = 'angular.module("tws",["' +
+                                    Object.keys(context.modules).join('","') +
+                                   '"])\n' + 'angular.bootstrap(document,["tws"])';
+
+
+        // Lets render main mustache template;
+        return fs.read(path.join(
+          process.cwd(),
+          DEPS_FOLDER,
+          name,
+          defs[name].template
+        )).then(function(template) {
           res.send(renderMustache(template, context));
         });
+
       });
     });
+
+    //
+    // updateDeps(name).then(function() {
+    //   return Q.all([
+    //
+    //     fs.read(path.join(
+    //       process.cwd(),
+    //       DEPS_FOLDER,
+    //       name,
+    //       'diversity.json'
+    //     )).then(parseJSON),
+    //
+    //
+    //   ]).then(function(result) {
+    //     var def = result[0];
+    //     var settings = result[1];
+    //     //var settings = result[1];
+    //     var prefix = function(name, url) {
+    //       if (url.indexOf('//') === 0 ||
+    //           url.indexOf('http://') === 0 ||
+    //           url.indexOf('https://') === 0) {
+    //         return url;
+    //       }
+    //
+    //       return path.join(DEPS_FOLDER, name, url);
+    //     };
+    //
+    //     return fs.read(
+    //       path.join(
+    //         process.cwd(),
+    //         DEPS_FOLDER,
+    //         def.name,
+    //         def.template
+    //       )
+    //     ).then(function(template) {
+    //       var context = {
+    //         scripts: [],
+    //         styles: [],
+    //         modules: [],
+    //         context: {
+    //           'webshop_uid':  11011,
+    //           'backend_url': 'davidstage.textalk.se/backend/jsonrpc/v1/',
+    //           'webshop_url': 'http://shop.humle.se',
+    //         }
+    //       };
+    //
+
+
+
+
+          //Här är jag! Måste skriva om deps så att den inte tar en diversity.json utan en lista med namnen
+          //på de komponenter som finns i settings + tws-theme. Så att alla laddas och appy sker och i den lägg till renderMustache
+
+
+
+
+
+
+          // return deps(def, function(comp) {
+          //   if (typeof comp.style === 'string') {
+          //     context.styles.unshift(prefix(comp.name, comp.style));
+          //   } else if (typeof comp.style !== 'undefined') {
+          //     context.styles = comp.style.map(function(u) {
+          //       return prefix(comp.name, u);
+          //     }).concat(context.styles);
+          //   }
+          //
+          //   if (typeof comp.script === 'string') {
+          //     context.scripts.unshift(prefix(comp.name, comp.script));
+          //   } else if (typeof comp.script !== 'undefined') {
+          //     context.scripts = comp.script.map(function(u) {
+          //       return prefix(comp.name, u);
+          //     }).concat(context.scripts);
+          //   }
+          //
+          //   if (comp.angular) {
+          //     context.modules.push(comp.angular);
+          //   }
+          //
+          // }).then(function() {
+          //   context.settings = settings;
+          //
+          //   // We also have deps in the settings/options data
+          //
+          //
+          //
+          //
+          //   loadAndRenderIncluded(context).then(function() {
+          //     context.angularBootstrap = 'angular.module("tws",["' + context.modules.join('","') +
+          //                                 '"])\n' + 'angular.bootstrap(document,["tws"])';
+          //
+          //
+          //
+          //     res.send(renderMustache(template, context));
+          //   });
   }).fail(function(err) {
     if (!Array.isArray(err)) {
       err = [err];
