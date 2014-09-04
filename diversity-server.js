@@ -1,20 +1,33 @@
 /* global process */
-var Q        = require('q');
-var realFs   = require('fs');
-var fs       = require('q-io/fs');
-var exec     = require('child_process').exec;
-var path     = require('path');
-var Mustache = require('mustache');
-var express  = require('express');
-var app      = express();
+var Q          = require('q');
+var realFs     = require('fs');
+var fs         = require('q-io/fs');
+var http       = require("q-io/http");
+var exec       = require('child_process').exec;
+var path       = require('path');
+var Mustache   = require('mustache');
+var bodyParser = require('body-parser');
+var express    = require('express');
+var tinylr     = require('tiny-lr');
+var app        = express();
 
-if (process.argv.length < 3) {
-  console.log('Usage:\n     node diversity-server.js <theme-component>');
+
+// Start a tiny-lr server as well.
+tinylr().listen(35729, function() {
+  console.log('... Listening on 35729 ...');
+});
+
+// All components that are possible to actually place inside the theme.
+var COMPONENTS = ['tws-custom-html', 'tws-cart'];
+
+if (process.argv.length < 4) {
+  console.log('Usage:\n     node diversity-server.js <theme-component> <settings.json>');
   process.exit();
 }
 
 var DEPS_FOLDER = 'deps/';
 
+app.use(bodyParser.json());
 app.use(express.static('.'));
 
 // FIXME: move to module
@@ -76,15 +89,15 @@ var updateDeps = function(name) {
     realFs.mkdirSync(DEPS_FOLDER);
   }
 
-  var promises = [];
+  // Handle non component deps
+  if (name.name && name.url) {
+    return updateDependency(
+      name.name,
+      name.url
+    );
+  }
 
-  //and jquery jsonrpc client
-  promises.push(
-    updateDependency(
-      'jquery.jsonrpcclient.js',
-      'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
-    )
-  );
+  var promises = [];
 
   var components = {};
   var loadAndUpdate = function(name) {
@@ -95,6 +108,7 @@ var updateDeps = function(name) {
       name,
       'diversity.json'
     );
+
     return fs.read(pth).then(parseJSON).then(function(diversity) {
       var promises = [];
       components[diversity.name] = diversity;
@@ -154,41 +168,12 @@ var parseJSON = function(data) {
     return Q.reject('Error parsing JSON');
   }
 };
-//
-// var findComponentsInSettings = function(settings) {
-//   var names = []; // Names are a list of component names we need to load.
-//   var compSettings = {};
-//
-//   if (settings.settings) {
-//     var traverse = function(obj) {
-//       if (Array.isArray(obj)) {
-//         obj.forEach(traverse);
-//         return;
-//       }
-//       // An object is a component data settings if it has the attribute component  and its a string
-//       if (obj.component && typeof obj.component === 'string') {
-//         // Skip it if we're already found it.
-//         if (!compSettings[obj.component]) {
-//           name.push(obj.component);
-//           compSettings[obj.component] = obj;
-//         }
-//       }
-//     };
-//     traverse(settings.settings);
-//   }
-//
-//   return {
-//     name: names,
-//     settings: compSettings
-//   };
-// };
 
 var findComponentsInSettings = function(settings, fn) {
   if (!settings) {
     return;
   }
   var traverse = function(obj) {
-    console.log('Traverse ',obj)
     if (Array.isArray(obj)) {
       obj.forEach(traverse);
       return;
@@ -209,31 +194,6 @@ var findComponentsInSettings = function(settings, fn) {
   traverse(settings);
 };
 
-
-
-
-
-
-//
-// var load = function(comp, comps) {
-//   var promises = [];
-//   if (comp.dependencies) {
-//     // We don't handle version numbers right now
-//     Object.keys(comp.dependencies).forEach(function(name) {
-//       if (!comps[name]) {
-//         console.log('Loading', name);
-//         var p = fs.read(DEPS_FOLDER + name + '/diversity.json')
-//                  .then(parseJSON)
-//                  .then(function(c) {
-//                    comps[name] = c;
-//                    return load(c, comps);
-//                  });
-//         promises.push(p);
-//       }
-//     });
-//   }
-//   return Q.all(promises);
-// };
 
 /**
  * Traverses the dependeny tree of components depth first and
@@ -265,19 +225,89 @@ var traverseDeps = function(names, defs, fn) {
   });
 };
 
+var serveFile = function(filename, res) {
+  // Mock settings from file
+  fs.read(filename).then(parseJSON)
+    .then(res.send.bind(res))
+    .fail(function(err) {
+      if (!Array.isArray(err)) {
+        err = [err];
+      }
+      err.map(function(e) { return e.stack || e; });
+      res.status(500).send('An error occured: ' + err.join('<br>'));
+      console.log(err.stack);
+    });
+};
+
+app.get('/diversity.json', function(req, res) {
+  serveFile(path.join(
+    process.cwd(),
+    DEPS_FOLDER,
+    process.argv[2],
+    'diversity.json'
+  ), res);
+});
+
+// Mock list components api
+app.get('/components', function (req, res) {
+  Q.all(
+    COMPONENTS.map(function(c) {
+      return http.read(
+        'http://git.diversity.io/textalk-webshop-native-components/' + c +
+        '/raw/master/diversity.json'
+      ).then(parseJSON);
+    })
+  ).then(function(comps) {
+    res.send(comps);
+  }).fail(function(err) {
+    if (!Array.isArray(err)) {
+      err = [err];
+    }
+    err.map(function(e) { return e.stack || e; });
+    res.status(500).send('An error occured: ' + err.join('<br>'));
+    console.log(err.stack);
+  });
+});
+
+app.get('/settings', function(req, res) {
+  serveFile(process.argv[3], res);
+});
+
+app.post('/settings', function(req, res) {
+  console.log('Saving settings');
+  fs.write(process.argv[3], JSON.stringify(req.body, undefined, 2))
+    .then(function() {
+      res.send({});
+      console.log('Settings changed, reloading');
+      tinylr.changed('/');
+    }).fail(function(err) {
+      if (!Array.isArray(err)) {
+        err = [err];
+      }
+      err.map(function(e) { return e.stack || e; });
+      res.status(500).send('An error occured: ' + err.join('<br>'));
+      console.log(err.stack);
+    });
+});
+
+// We need tws-compontselector and jsquery.jsonrpcclient
+updateDeps('tws-admin-schema-form').fail(function(err) {
+  console.log(err);
+});
+updateDeps({
+  name: 'jquery.jsonrpcclient.js',
+  url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
+});
+
+
 app.get('/', function(req, res) {
 
   // We update dependencies and load diversity.json each time so we always pick up changes.
   // This is for development people!
   var name = process.argv[2];
 
-  // Mock settings from file
-  fs.read(path.join(
-    process.cwd(),
-    DEPS_FOLDER,
-    name,
-    'settings.json'
-  )).then(parseJSON).then(function(settings) {
+  // Read settings from file, they can have updated.
+  fs.read(process.argv[3]).then(parseJSON).then(function(settings) {
     console.log(settings);
     // We want to load the supplied theme + any components in it's settins
     var promises = [];
@@ -305,7 +335,7 @@ app.get('/', function(req, res) {
 
       var createContext = function() {
         return {
-          scripts: [],
+          scripts: ['http://localhost:35729/livereload.js'],
           styles: [],
           modules: [],
           context: {
@@ -365,7 +395,7 @@ app.get('/', function(req, res) {
 
         traverseDeps(names, defs, function(comp) {
           if (typeof comp.style === 'string') {
-            context.styles.unshift(prefix(comp.name, comp.style));
+            context.styles.push(prefix(comp.name, comp.style));
           } else if (typeof comp.style !== 'undefined') {
             context.styles = comp.style.map(function(u) {
               return prefix(comp.name, u);
@@ -406,100 +436,6 @@ app.get('/', function(req, res) {
       });
     });
 
-    //
-    // updateDeps(name).then(function() {
-    //   return Q.all([
-    //
-    //     fs.read(path.join(
-    //       process.cwd(),
-    //       DEPS_FOLDER,
-    //       name,
-    //       'diversity.json'
-    //     )).then(parseJSON),
-    //
-    //
-    //   ]).then(function(result) {
-    //     var def = result[0];
-    //     var settings = result[1];
-    //     //var settings = result[1];
-    //     var prefix = function(name, url) {
-    //       if (url.indexOf('//') === 0 ||
-    //           url.indexOf('http://') === 0 ||
-    //           url.indexOf('https://') === 0) {
-    //         return url;
-    //       }
-    //
-    //       return path.join(DEPS_FOLDER, name, url);
-    //     };
-    //
-    //     return fs.read(
-    //       path.join(
-    //         process.cwd(),
-    //         DEPS_FOLDER,
-    //         def.name,
-    //         def.template
-    //       )
-    //     ).then(function(template) {
-    //       var context = {
-    //         scripts: [],
-    //         styles: [],
-    //         modules: [],
-    //         context: {
-    //           'webshop_uid':  11011,
-    //           'backend_url': 'davidstage.textalk.se/backend/jsonrpc/v1/',
-    //           'webshop_url': 'http://shop.humle.se',
-    //         }
-    //       };
-    //
-
-
-
-
-          //Här är jag! Måste skriva om deps så att den inte tar en diversity.json utan en lista med namnen
-          //på de komponenter som finns i settings + tws-theme. Så att alla laddas och appy sker och i den lägg till renderMustache
-
-
-
-
-
-
-          // return deps(def, function(comp) {
-          //   if (typeof comp.style === 'string') {
-          //     context.styles.unshift(prefix(comp.name, comp.style));
-          //   } else if (typeof comp.style !== 'undefined') {
-          //     context.styles = comp.style.map(function(u) {
-          //       return prefix(comp.name, u);
-          //     }).concat(context.styles);
-          //   }
-          //
-          //   if (typeof comp.script === 'string') {
-          //     context.scripts.unshift(prefix(comp.name, comp.script));
-          //   } else if (typeof comp.script !== 'undefined') {
-          //     context.scripts = comp.script.map(function(u) {
-          //       return prefix(comp.name, u);
-          //     }).concat(context.scripts);
-          //   }
-          //
-          //   if (comp.angular) {
-          //     context.modules.push(comp.angular);
-          //   }
-          //
-          // }).then(function() {
-          //   context.settings = settings;
-          //
-          //   // We also have deps in the settings/options data
-          //
-          //
-          //
-          //
-          //   loadAndRenderIncluded(context).then(function() {
-          //     context.angularBootstrap = 'angular.module("tws",["' + context.modules.join('","') +
-          //                                 '"])\n' + 'angular.bootstrap(document,["tws"])';
-          //
-          //
-          //
-          //     res.send(renderMustache(template, context));
-          //   });
   }).fail(function(err) {
     if (!Array.isArray(err)) {
       err = [err];

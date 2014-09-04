@@ -1,2 +1,100 @@
 {
+  "custom_css": {
+    "rules": "footer {\n text-align: center;\n}",
+    "links": []
+  },
+  "layout": {
+    "top": [
+      {
+        "component": "tws-custom-html",
+        "settings": {
+          "custom_html": "<h1>ONE SHOP TO RULE THEM ALL!!!!</h1>"
+        }
+      }
+    ],
+    "footer": [
+      {
+        "component": "tws-custom-html",
+        "settings": {
+          "custom_html": "<em><small>Please don't read me.</small></em>"
+        }
+      }
+    ],
+    "left_pane": [
+      {
+        "component": "tws-custom-html",
+        "settings": {
+          "custom_html": "<p>Standard left pane</p>"
+        }
+      }
+    ],
+    "right_pane": [
+      {
+        "component": "tws-custom-html",
+        "settings": {
+          "custom_html": "<p>Standard right pane</p>"
+        }
+      }
+    ],
+    "pages": {
+      "StartPage": {
+        "hide_left_pane": false,
+        "hide_right_pane": true,
+        "middle": [
+          {
+            "component": "tws-custom-html",
+            "settings": {
+              "custom_html": "<h1 ng-click=\"goto('/malt/')\">LEEEEEEEEEEEEEEEROY JEEENKINS</h1>\n<p>I hope you like my invention</p>"
+            }
+          },
+          {
+            "component": "tws-cart",
+            "settings": {
+              "editable": false,
+              "zebra": false
+            }
+          }
+        ],
+        "left_pane": [],
+        "right_pane": []
+      },
+      "Article": {
+        "hide_left_pane": true,
+        "hide_right_pane": true,
+        "middle": [
+          {
+            "component": "tws-custom-html",
+            "settings": {
+              "custom_html": "<h1>Article page</h1>"
+            }
+          }
+        ],
+        "left_pane": [],
+        "right_pane": []
+      },
+      "Articlegroup": {
+        "hide_left_pane": true,
+        "hide_right_pane": false,
+        "middle": [
+          {
+            "component": "tws-custom-html",
+            "settings": {
+              "custom_html": "<h1 ng-click=\"goto('/')\">Article Group Page</h1>"
+            }
+          }
+        ],
+        "left_pane": [],
+        "right_pane": []
+      },
+      "Checkout": {
+        "hide_left_pane": "false",
+        "hide_right_pane": "false"
+      }
+    }
+  },
+  "checkout_url": "/checkout",
+  "custom_js": {
+    "srcs": []
+  },
+  "fluid": true
 }

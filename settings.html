@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Settings page</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+    <style>
+      body > div {
+        margin: 15px 0px;
+      }
+
+      .modal {
+        display: block;
+      }
+
+    </style>
+  </head>
+  <body ng-app="settings">
+
+
+    <div ng-controller="SettingsCtrl" class="container">
+      <form name="theForm" ng-submit="save(theForm)">
+        <div sf-schema="schema" sf-form="form" sf-model="settings"></div>
+
+        <input class="btn btn-default" type="submit" value="Save" ng-disabled="saving">
+        <span ng-show="saving">Saving...</span>
+        <span ng-show="theForm.$valid && saved && !saving">Saved.</span>
+        <span ng-show="!theForm.$valid">Heads up, you have validation errors!</span>
+      </form>
+    </div>
+
+
+
+    <script src="//code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.3.0-beta.19/angular.js"></script>
+    <script src="//code.angularjs.org/1.3.0-beta.19/angular-sanitize.min.js"></script>
+    <script src="deps/tws-schema-form/bower_components/tv4/tv4.js"></script>
+    <script src="deps/tws-schema-form/bower_components/objectpath/lib/ObjectPath.js"></script>
+    <script src="deps/tws-schema-form/bower_components/angular-schema-form/dist/schema-form.min.js"></script>
+    <script src="deps/tws-schema-form/bower_components/angular-schema-form/dist/bootstrap-decorator.min.js"></script>
+
+    <script src="deps/tws-admin-schema-form/src/module.js"></script>
+    <script src="deps/tws-admin-schema-form/src/directives/diversity-chooser.js"></script>
+    <script src="deps/tws-admin-schema-form/src/services/chooser.js"></script>
+    <script src="deps/tws-admin-schema-form/src/services/diversity.js"></script>
+    <script src="deps/tws-admin-schema-form/templates.min.js"></script>
+
+    <script charset="utf-8">
+      // MOCK twsApi just so we can get going
+      angular.module('twsApi', []).factory('twsApi.Jed', function() {
+        return function(scope) {
+          scope.gettext =  function(a) { return a; };
+        };
+      }).factory('twsApi.SystemError', function() {
+        return function() {
+          // We already console log stuff so this is uneccessary
+        };
+      });
+
+      angular.module('settings',['schemaForm','twsAdminSchemaForm'])
+             .controller('SettingsCtrl', function($scope, $http) {
+
+               $http.get('/diversity.json').then(function(res) {
+                 var diversity = res.data;
+
+                 $http.get('/settings').then(function(res) {
+                   console.log(diversity)
+                   $scope.schema   = diversity.settings;
+                   $scope.form     = diversity.settingsForm || ['*'];
+                   $scope.settings = res.data || {};
+                 });
+               });
+
+               $scope.saved  = false;
+               $scope.saving = false;
+               $scope.save = function(form) {
+                // First we broadcast an event so all fields validate themselves
+                $scope.$broadcast('schemaFormValidate');
+
+                // Then we check if the form is valid
+                if (form.$valid) {
+                  $scope.saving = true;
+
+                  // Clean arrays
+                  var clean = function(obj) {
+                    angular.forEach(obj, function(value, name) {
+                      if (angular.isArray(value)) {
+                        var cleaned = [];
+                        angular.forEach(value, function(item) {
+                          if (item && !(angular.isObject(item) && Object.keys(item).length === 0)) {
+                            clean(item);
+                            cleaned.push(item);
+                          }
+                          obj[name] = cleaned;
+                        });
+                      } else if (angular.isObject(value)) {
+                        clean(value);
+                      }
+                    });
+                  };
+
+                  clean($scope.settings);
+                  console.log($scope.settings)
+                  $http.post('/settings',$scope.settings)
+                       .then(function(){
+                         $scope.saving = false;
+                         $scope.saved = true;
+                       }).catch(function(err) {
+                         console.log(err);
+                         $scope.saving = false;
+                       });
+
+                }
+              };
+
+             });
+    </script>
+
+  </body>
+</html>
