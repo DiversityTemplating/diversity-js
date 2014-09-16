@@ -290,6 +290,16 @@
               options.context
             );
             target.innerHTML = html;
+
+            // Eval any script tags
+            var scripts = target.querySelectorAll('script');
+            for (var i = 0; i < scripts.length; i++) {
+              var script = scripts[i];
+              if (script.type === 'text/javascript' && script.src === '') {
+                eval(script.innerHTML);
+              }
+            }
+
           }
 
           // We append bootstrap code as a script tag below the others, so it's executed whenever the
