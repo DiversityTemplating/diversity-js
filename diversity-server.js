@@ -18,7 +18,7 @@ tinylr().listen(35729, function() {
 });
 
 // All components that are possible to actually place inside the theme.
-var COMPONENTS = ['tws-custom-html', 'tws-cart'];
+var COMPONENTS = ['tws-custom-html', 'tws-cart', 'tws-top-menu' ,'tws-article-search', 'tws-article', 'tws-articlegroup-menu'];
 
 if (process.argv.length < 4) {
   console.log('Usage:\n     node diversity-server.js <theme-component> <settings.json>');
@@ -46,36 +46,42 @@ var exists = function(pth) {
  * @value {String} value (optional) URL to component
  * @return {Promise} a promise that resolves when everything is up to date.
  */
+var alreadyUpdated = {};
 var updateDependency = function(name, value) {
   var deferred = Q.defer();
+  
+  if (!alreadyUpdated[name]) {
+    console.log('Checking dependency ' + name);
+    var pth = path.join(process.cwd(), DEPS_FOLDER + name);
 
-  console.log('Checking dependency ' + name);
-  var pth = path.join(process.cwd(), DEPS_FOLDER + name);
-
-  //Have we aldready cloned the repo?
-  var cmd = 'git pull';
-  var cwd = pth;
-  if (!exists(pth)) {
-    var url = 'http://git.diversity.io/textalk-webshop-native-components/' +
-              name + '.git ';
-    if (/^(https{0,1}:\/\/|\/\/|git).*/.test(value)) {
-      url = value;
-    }
-    cmd = 'git clone ' + url;
-    cwd = path.join(process.cwd(), DEPS_FOLDER);
-  }
-  console.log(cmd, cwd);
-  exec(
-    cmd,
-    {cwd: cwd},
-    function (err) {
-      if (err !== null) {
-        deferred.reject();
-      } else {
-        deferred.resolve(name);
+    //Have we aldready cloned the repo?
+    var cmd = 'git pull';
+    var cwd = pth;
+    if (!exists(pth)) {
+      var url = 'http://git.diversity.io/textalk-webshop-native-components/' +
+                name + '.git ';
+      if (/^(https{0,1}:\/\/|\/\/|git).*/.test(value)) {
+        url = value;
       }
+      cmd = 'git clone ' + url;
+      cwd = path.join(process.cwd(), DEPS_FOLDER);
     }
-  );
+    console.log(cmd, cwd);
+    exec(
+      cmd,
+      {cwd: cwd},
+      function (err) {
+        if (err !== null) {
+          deferred.reject();
+        } else {
+          alreadyUpdated[name] = true;
+          deferred.resolve(name);
+        }
+      }
+    );
+   } else {
+    deferred.resolve(name);
+   }
   return deferred.promise;
 };
 
@@ -301,7 +307,10 @@ updateDeps({
 
 
 app.get('/', function(req, res) {
-
+  
+  // Reset skip list
+  alreadUpdated = {};
+  
   // We update dependencies and load diversity.json each time so we always pick up changes.
   // This is for development people!
   var name = process.argv[2];
