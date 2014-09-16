@@ -1,6 +1,6 @@
 {
   "custom_css": {
-    "rules": "footer {\n text-align: center;\n}",
+    "rules": "@import url(http://fonts.googleapis.com/css?family=Lobster);\n\nheader {\n   font-family: 'Lobster', cursive;\n}\n\nheader h1 {\n  font-size: 62px;\n}\nh1,h2,h3,h4 {\ntext-shadow: 1px 1px 1px #FFFFFF;\n  font-family: 'Lobster', cursive;\n}\n\nfooter {\n text-align: center;\n}\n\n.yellow {\ncolor: yellow\n}\n\ntws-articlegroup-menu > ul {\n   list-style-type: none;\n}\n\ntws-articlegroup-menu > ul > li {\n   list-style-type: none;\n}\n\ntws-articlegroup-menu > ul > li > ul {\n   list-style-type: none;\n}\n\ntws-articlegroup-menu > ul > li > ul > li {\n   list-style-type: none;\n}\n\n\nhtml, body {\n  padding: 0;\n  margin: 0;\n  height: 100%;\n  background: #f2f2f2;\n  color: #333;\n  font-family: 'Segoe UI', 'Helvetica neue', Arial;\ntext-shadow: 1px 1px 1px #FFFFFF;\n}\n\n.tws-theme > header {\n  padding: 15px;\n  border-bottom: 1px solid #cecece;\n}\n\n.tws-theme .left-pane  ul {\npadding-left: 15px;\n}\n\n.tws-theme {\n}\n\n.tws-theme  a {\n}\n\n.tws-theme > div > .left-pane {\n  border-right: 1px solid #cecece;\n}\n\n.tws-theme > div > .content {\n}\n\n.tws-theme > div > .right-pane {\n  border-left: 1px solid #cecece;\n}\n\n.left-pane {\n  padding: 5px;\n\n}\n\n\n/*\n  FIXME: We need to decide on how we will handle height in the layout.\n  This is extra problematic since we optimally would like footer and header to grow with\n  whatever you put into them and at the same time take up full page height at a minimum.\n  And like side panes to have same height as the columns etc.\n*/\n.tws-theme > div > .content {\n  min-height: 800px;\n}",
     "links": []
   },
   "layout": {
@@ -8,7 +8,25 @@
       {
         "component": "tws-custom-html",
         "settings": {
-          "custom_html": "<h1>ONE SHOP TO RULE THEM ALL!!!!</h1>"
+          "custom_html": "<h1>One shop to rule them all</h1>"
+        }
+      },
+      {
+        "component": "tws-cart",
+        "settings": {
+          "editable": true,
+          "zebra": true
+        }
+      },
+      {
+        "component": "tws-article-search",
+        "settings": {
+          "limit": 10,
+          "placeholder": {
+            "sv": "Sök",
+            "en": "Search",
+            "hr": "???"
+          }
         }
       }
     ],
@@ -24,7 +42,13 @@
       {
         "component": "tws-custom-html",
         "settings": {
-          "custom_html": "<p>Standard left pane</p>"
+          "custom_html": "<a href=\"/\" ng-click=\"navigate($event)\">Home</a>"
+        }
+      },
+      {
+        "component": "tws-articlegroup-menu",
+        "settings": {
+          "root": true
         }
       }
     ],
@@ -34,9 +58,29 @@
         "settings": {
           "custom_html": "<p>Standard right pane</p>"
         }
+      },
+      {
+        "component": "tws-articlegroup-menu",
+        "settings": {
+          "root": false
+        }
       }
     ],
     "pages": {
+      "ArticleSearchResults": {
+        "hide_left_pane": false,
+        "hide_right_pane": true,
+        "left_pane": [],
+        "right_pane": [],
+        "routing": {
+          "url": "/search/:term"
+        },
+        "middle": {
+          "component": "tws-article-search-page",
+          "settings": {
+          }
+        }
+      },
       "StartPage": {
         "hide_left_pane": false,
         "hide_right_pane": true,
@@ -44,7 +88,7 @@
           {
             "component": "tws-custom-html",
             "settings": {
-              "custom_html": "<h1 ng-click=\"goto('/malt/')\">LEEEEEEEEEEEEEEEROY JEEENKINS</h1>\n<p>I hope you like my invention</p>"
+              "custom_html": "<h1>Please buy something!!!.</h1>"
             }
           },
           {
@@ -53,13 +97,19 @@
               "editable": false,
               "zebra": false
             }
+          },
+          {
+            "component": "tws-articlegroup-menu",
+            "settings": {
+              "root": true
+            }
           }
         ],
         "left_pane": [],
         "right_pane": []
       },
       "Article": {
-        "hide_left_pane": true,
+        "hide_left_pane": false,
         "hide_right_pane": true,
         "middle": [
           {
@@ -73,13 +123,23 @@
         "right_pane": []
       },
       "Articlegroup": {
-        "hide_left_pane": true,
+        "hide_left_pane": false,
         "hide_right_pane": false,
         "middle": [
           {
             "component": "tws-custom-html",
             "settings": {
               "custom_html": "<h1 ng-click=\"goto('/')\">Article Group Page</h1>"
+            }
+          },
+          {
+            "component": "tws-article-list",
+            "settings": {}
+          },
+          {
+            "component": "tws-articlegroup-menu",
+            "settings": {
+              "root": false
             }
           }
         ],
@@ -96,5 +156,5 @@
   "custom_js": {
     "srcs": []
   },
-  "fluid": true
+  "fluid": false
 }
