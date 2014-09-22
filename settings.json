@@ -12,20 +12,31 @@
         }
       },
       {
-        "component": "tws-cart",
+        "component": "tws-top-menu",
         "settings": {
-          "editable": true,
-          "zebra": true
+          "menuItems": [
+            {
+              "articlegroupId": null,
+              "createMenusForChildren": true,
+              "depth": 3
+            },
+            {
+              "link": "tws://link",
+              "name": {
+                "sv": "En länk"
+              }
+            }
+          ]
         }
       },
       {
         "component": "tws-article-search",
         "settings": {
-          "limit": 10,
+          "limit": 12,
           "placeholder": {
             "sv": "Sök",
             "en": "Search",
-            "hr": "???"
+            "hr": "Uhmmm what was it again?"
           }
         }
       }
@@ -48,7 +59,7 @@
       {
         "component": "tws-articlegroup-menu",
         "settings": {
-          "root": true
+          "root": false
         }
       }
     ],
@@ -77,8 +88,7 @@
         },
         "middle": {
           "component": "tws-article-search-page",
-          "settings": {
-          }
+          "settings": {}
         }
       },
       "StartPage": {
@@ -88,7 +98,7 @@
           {
             "component": "tws-custom-html",
             "settings": {
-              "custom_html": "<h1>Please buy something!!!.</h1>"
+              "custom_html": "<h1>Please buy something!!!.</h1>\n<script type=\"text/javascript\">\nconsole.log('yes! ********************************************')\n</script>"
             }
           },
           {
@@ -97,7 +107,9 @@
               "editable": false,
               "zebra": false
             }
-          },
+          }
+        ],
+        "left_pane": [
           {
             "component": "tws-articlegroup-menu",
             "settings": {
@@ -105,8 +117,14 @@
             }
           }
         ],
-        "left_pane": [],
-        "right_pane": []
+        "right_pane": [
+          {
+            "component": "tws-custom-html",
+            "settings": {
+              "custom_html": "<p>foobar</p>"
+            }
+          }
+        ]
       },
       "Article": {
         "hide_left_pane": false,
@@ -117,6 +135,10 @@
             "settings": {
               "custom_html": "<h1>Article page</h1>"
             }
+          },
+          {
+            "component": "tws-article",
+            "settings": {}
           }
         ],
         "left_pane": [],

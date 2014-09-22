@@ -49,7 +49,7 @@ var exists = function(pth) {
 var alreadyUpdated = {};
 var updateDependency = function(name, value) {
   var deferred = Q.defer();
-  
+
   if (!alreadyUpdated[name]) {
     console.log('Checking dependency ' + name);
     var pth = path.join(process.cwd(), DEPS_FOLDER + name);
@@ -67,14 +67,15 @@ var updateDependency = function(name, value) {
       cwd = path.join(process.cwd(), DEPS_FOLDER);
     }
     console.log(cmd, cwd);
+    alreadyUpdated[name] = true;
     exec(
       cmd,
       {cwd: cwd},
       function (err) {
         if (err !== null) {
+          delete alreadyUpdated[name];
           deferred.reject();
         } else {
-          alreadyUpdated[name] = true;
           deferred.resolve(name);
         }
       }
@@ -305,12 +306,11 @@ updateDeps({
   url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
 });
 
-
 app.get('/', function(req, res) {
-  
+
   // Reset skip list
-  alreadUpdated = {};
-  
+  alreadyUpdated = {};
+
   // We update dependencies and load diversity.json each time so we always pick up changes.
   // This is for development people!
   var name = process.argv[2];
@@ -393,6 +393,7 @@ app.get('/', function(req, res) {
 
           var c = createContext();
           c.settings = obj.settings;
+          c.settingsJSON = JSON.stringify(obj.settings).replace(/<\/script>/g,'<\\/script>')
           console.log('Rendering html for component ', obj.component);
           obj.componentHTML = renderMustache(templateData[i], c);
           console.log(obj.componentHTML);
@@ -425,7 +426,7 @@ app.get('/', function(req, res) {
         });
 
         context.settings = settings;
-        context.settingsJSON = JSON.stringify(settings);
+        context.settingsJSON = JSON.stringify(settings).replace(/<\/script>/g,'<\\/script>');
 
         context.angularBootstrap = 'angular.module("tws",["' +
                                     Object.keys(context.modules).join('","') +
