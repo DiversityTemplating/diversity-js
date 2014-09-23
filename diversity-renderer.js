@@ -141,7 +141,8 @@
         webshop: 11011,
         languageCode: 'sv',
         currencyCode: 'SEK'
-      }
+      },
+      module: null
     }, options);
     var target = this[0];
 
@@ -327,7 +328,8 @@
                   " }",
                   " twsSessionProvider.setResetJsonRpcOnSession(true);",
                   "}]);",
-                  'angular.bootstrap(document.body,["diversity"]);'
+                  'angular.bootstrap(document.body,["diversity"' +
+                  (options.module ? ',"' + options.module +'"' :'') + ']);'
             ];
             /* jscs: enable */
             bootstrap.innerHTML = setup.join('\n');
