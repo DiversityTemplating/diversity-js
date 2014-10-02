@@ -321,7 +321,8 @@
                   "function(twsJsonRpcClientProvider,  twsSessionProvider,  twsJedProvider,  shopId, language){",
                   " twsJsonRpcClientProvider.set(",
                   "     'ajaxUrl',               ",
-                  "     '" + options.backend+"?webshop='+shopId+'&language='+language",
+                  "     '" + options.backend + "?webshop='+shopId+'&language='+language" +
+                  (options.auth?" + '&auth="+options.auth+"'" :''),
                   "   );",
                   " if (window.localStorage) {",
                   "     twsSessionProvider.setSessionId(localStorage.getItem('tws.sessionId'));",
@@ -332,6 +333,7 @@
                   (options.module ? ',"' + options.module +'"' :'') + ']);'
             ];
             /* jscs: enable */
+            console.log(setup.join('\n'))
             bootstrap.innerHTML = setup.join('\n');
             frag.appendChild(bootstrap);
             target.appendChild(frag);
