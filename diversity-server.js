@@ -19,7 +19,7 @@ tinylr().listen(35729, function() {
 });
 
 if (process.argv.length < 5) {
-  console.log('Usage:\n     node diversity-server.js <webshopid> <themeid> <auth>');
+  console.log('Usage:\n     node diversity-server.js <webshopid> <themeid|settings.json> <auth>');
   process.exit();
 }
 
@@ -51,13 +51,22 @@ app.get('/reset', function(req, res) {
 
 app.get('/', function(req, res) {
 
+  var tid = parseInt(themeUid, 10);
+  var settingsPromise;
+  if (isNaN(tid)) {
+    //Its not a number but a settings file!
+    settingsPromise = fs.read(themeUid).then(deps.parseJSON).then(function(settings) {
+      return {params: {settings:settings}};
+    });
+  } else {
+    settingsPromise = api('Theme.get', [tid, true]);
+  }
+
   // We update dependencies and load theme each time so we always pick up changes.
   // This is for development people!
-  api('Theme.get', [parseInt(themeUid, 10), true]).then(function(theme) {
+  settingsPromise.then(function(theme) {
     var settings  = (theme.params && theme.params.settings) || {};
     var name      = (theme.params && theme.params.component) || 'tws-theme';
-
-    console.log('Got theme', theme)
 
     // We want to load the supplied theme + any components in it's settins
     var promises = [];
@@ -100,6 +109,9 @@ app.get('/', function(req, res) {
           renderList.push(obj);
         }
       });
+      //console.log('And the renderlist is: ', renderList.map(function(c) {
+      //  return c.component;
+      //}));
 
       // Load all templates
       return Q.all(templates).then(function(templateData) {
@@ -142,12 +154,17 @@ app.get('/', function(req, res) {
         });
 
         context.settings = settings;
+
+        // Since settingsJSON is going up to the server we need to clean out redundant code.
+        util.findComponentsInSettings(settings, function(obj) {
+          delete obj.settings;
+        }, true);
+
         context.settingsJSON = JSON.stringify(settings).replace(/<\/script>/g,'<\\/script>');
 
         context.angularBootstrap = 'angular.module("tws",["' +
                                     Object.keys(context.modules).join('","') +
                                    '"])\n' + 'angular.bootstrap(document,["tws"])';
-
 
         // Lets render main mustache template;
         return fs.read(path.join(
