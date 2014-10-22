@@ -43,13 +43,19 @@ deps.updateDeps({
   url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
 });
 
+
 app.get('/reset', function(req, res) {
   // Reset skip list
   deps.reset();
   res.send('OK');
 });
 
-app.get('/', function(req, res) {
+app.get('/*', function(req, res, next) {
+
+  // Skip /deps, those are files
+  if (req.url.indexOf('/deps') === 0) {
+    return next();
+  }
 
   var tid = parseInt(themeUid, 10);
   var settingsPromise;
@@ -120,7 +126,7 @@ app.get('/', function(req, res) {
         renderList.forEach(function(obj, i) {
 
           var c = render.createContext();
-          c.settings = obj.settings;
+          c.settings = obj.settings || {};
           c.settingsJSON = JSON.stringify(obj.settings).replace(/<\/script>/g,'<\\/script>')
           obj.componentHTML = render.renderMustache(templateData[i], c);
         });
@@ -187,7 +193,6 @@ app.get('/', function(req, res) {
     res.status(500).send('An error occured: ' + err.join('<br>'));
 
   });
-
 });
 
 var server = app.listen(3000, function() {
