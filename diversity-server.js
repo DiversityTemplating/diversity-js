@@ -18,8 +18,8 @@ tinylr().listen(35729, function() {
   console.log('... Listening on 35729 ...');
 });
 
-if (process.argv.length < 5) {
-  console.log('Usage:\n     node diversity-server.js <webshopid> <themeid|settings.json> <auth>');
+if (process.argv.length < 4) {
+  console.log('Usage:\n     node diversity-server.js <webshopid> <themeid|settings.json> [<auth>]');
   process.exit();
 }
 
