@@ -24,177 +24,187 @@ if (process.argv.length < 4) {
 }
 
 var webshopUid = process.argv[2];
+var webshopUrl;
 var themeUid = process.argv[3];
 var auth = process.argv[4];
 
 var api = apiFactory(webshopUid, 'sv', auth);
+
 
 //ZGF2aWRAdGV4dGFsay5zZTsxNDEyMzIyNTIyO2EwOTJkOTJiNDlkNGYzN2I0ZmMxMjI2ZGI2NmU5MTg3
 
 app.use(bodyParser.json());
 app.use(express.static('.'));
 
-// We need tws-compontselector and jsquery.jsonrpcclient
-deps.updateDeps('tws-admin-schema-form').fail(function(err) {
-  console.log(err);
-});
-deps.updateDeps({
-  name: 'jquery.jsonrpcclient.js',
-  url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
-});
+Q.all([
+  // We need tws-compontselector and jsquery.jsonrpcclient
+  deps.updateDeps('tws-admin-schema-form').fail(function(err) {
+    console.log(err);
+  }),
 
+  deps.updateDeps({
+    name: 'jquery.jsonrpcclient.js',
+    url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
+  }),
 
-app.get('/reset', function(req, res) {
-  // Reset skip list
-  deps.reset();
-  res.send('OK');
-});
+  api('Webshop.get', [webshopUid, {url:'sv'}]).then(function(result) {
+    webshopUrl = result.url.sv;
+  })
+]).then(function() {
 
-app.get('/*', function(req, res, next) {
+  app.get('/reset', function(req, res) {
+    // Reset skip list
+    deps.reset();
+    res.send('OK');
+  });
 
-  // Skip /deps, those are files
-  if (req.url.indexOf('/deps') === 0) {
-    return next();
-  }
+  app.get('/*', function(req, res, next) {
 
-  var tid = parseInt(themeUid, 10);
-  var settingsPromise;
-  if (isNaN(tid)) {
-    //Its not a number but a settings file!
-    settingsPromise = fs.read(themeUid).then(deps.parseJSON).then(function(settings) {
-      return {params: {settings:settings}};
-    });
-  } else {
-    settingsPromise = api('Theme.get', [tid, true]);
-  }
+    // Skip /deps, those are files
+    if (req.url.indexOf('/deps') === 0) {
+      return next();
+    }
 
-  // We update dependencies and load theme each time so we always pick up changes.
-  // This is for development people!
-  settingsPromise.then(function(theme) {
-    var settings  = (theme.params && theme.params.settings) || {};
-    var name      = (theme.params && theme.params.component) || 'tws-theme';
+    var tid = parseInt(themeUid, 10);
+    var settingsPromise;
+    if (isNaN(tid)) {
+      //Its not a number but a settings file!
+      settingsPromise = fs.read(themeUid).then(deps.parseJSON).then(function(settings) {
+        return {params: {settings:settings}};
+      });
+    } else {
+      settingsPromise = api('Theme.get', [tid, true]);
+    }
 
-    // We want to load the supplied theme + any components in it's settins
-    var promises = [];
+    // We update dependencies and load theme each time so we always pick up changes.
+    // This is for development people!
+    settingsPromise.then(function(theme) {
+      var settings  = (theme.params && theme.params.settings) || {};
+      var name      = (theme.params && theme.params.component) || 'tws-theme';
 
-    promises.push(deps.updateDeps(name));
+      // We want to load the supplied theme + any components in it's settins
+      var promises = [];
 
-    var settingsComponents = {};
-    util.findComponentsInSettings(settings, function(c) {
-      settingsComponents[c.component] = true;
-    });
+      promises.push(deps.updateDeps(name));
 
-    Object.keys(settingsComponents).forEach(function(n) {
-      promises.push(deps.updateDeps(n));
-    });
+      var settingsComponents = {};
+      util.findComponentsInSettings(settings, function(c) {
+        settingsComponents[c.component] = true;
+      });
 
-    return Q.all(promises).then(function(result) {
-      var defs = result.reduce(function(soFar, obj) {
-        Object.keys(obj).forEach(function(k) {
-          if (obj[k] !== undefined) {
-            soFar[k] = obj[k];
+      Object.keys(settingsComponents).forEach(function(n) {
+        promises.push(deps.updateDeps(n));
+      });
+
+      return Q.all(promises).then(function(result) {
+        var defs = result.reduce(function(soFar, obj) {
+          Object.keys(obj).forEach(function(k) {
+            if (obj[k] !== undefined) {
+              soFar[k] = obj[k];
+            }
+          });
+          return soFar;
+        }, {});
+
+        var renderList = [];
+        var templates = [];
+
+        util.findComponentsInSettings(settings, function(obj) {
+          // findComponentsInSettings goes depth first and applies children before parents
+          var def = defs[obj.component];
+          if (def.template) {
+            // FIXME: alternative templates
+            templates.push(fs.read(path.join(
+              process.cwd(),
+              deps.DEPS_FOLDER,
+              def.name,
+              def.template
+            )));
+            renderList.push(obj);
           }
         });
-        return soFar;
-      }, {});
+        //console.log('And the renderlist is: ', renderList.map(function(c) {
+        //  return c.component;
+        //}));
 
-      var renderList = [];
-      var templates = [];
+        // Load all templates
+        return Q.all(templates).then(function(templateData) {
 
-      util.findComponentsInSettings(settings, function(obj) {
-        // findComponentsInSettings goes depth first and applies children before parents
-        var def = defs[obj.component];
-        if (def.template) {
-          // FIXME: alternative templates
-          templates.push(fs.read(path.join(
+          // Render mustache templates for each in the list.
+          renderList.forEach(function(obj, i) {
+
+            var c = render.createContext(webshopUid, webshopUrl);
+            c.settings = obj.settings || {};
+            c.settingsJSON = JSON.stringify(obj.settings).replace(/<\/script>/g,'<\\/script>')
+            obj.componentHTML = render.renderMustache(templateData[i], c);
+          });
+
+          var context = render.createContext(webshopUid, webshopUrl);
+          var names = Object.keys(settingsComponents);
+          names.unshift(name);
+
+          var prefix = render.prefixFactory(deps.DEPS_FOLDER);
+
+          util.traverseDeps(names, defs, function(comp) {
+            if (typeof comp.style === 'string') {
+              context.styles.push(prefix(comp.name, comp.style));
+            } else if (typeof comp.style !== 'undefined') {
+              context.styles = comp.style.map(function(u) {
+                return prefix(comp.name, u);
+              }).concat(context.styles);
+            }
+
+            if (typeof comp.script === 'string') {
+              context.scripts.unshift(prefix(comp.name, comp.script));
+            } else if (typeof comp.script !== 'undefined') {
+              context.scripts = comp.script.map(function(u) {
+                return prefix(comp.name, u);
+              }).concat(context.scripts);
+            }
+
+            if (comp.angular) {
+              context.modules[comp.angular] = true;
+            }
+          });
+
+          context.settings = settings;
+
+          // Since settingsJSON is going up to the server we need to clean out redundant code.
+          util.findComponentsInSettings(settings, function(obj) {
+            delete obj.settings;
+          }, true);
+
+          context.settingsJSON = JSON.stringify(settings).replace(/<\/script>/g,'<\\/script>');
+
+          context.angularBootstrap = 'angular.module("tws",["' +
+                                      Object.keys(context.modules).join('","') +
+                                     '"])\n' + 'angular.bootstrap(document,["tws"])';
+
+          // Lets render main mustache template;
+          return fs.read(path.join(
             process.cwd(),
             deps.DEPS_FOLDER,
-            def.name,
-            def.template
-          )));
-          renderList.push(obj);
-        }
+            name,
+            defs[name].template
+          )).then(function(template) {
+            res.send(render.renderMustache(template, context));
+          });
+
+        });
       });
-      //console.log('And the renderlist is: ', renderList.map(function(c) {
-      //  return c.component;
-      //}));
+    }).fail(function(err) {
+      if (!Array.isArray(err)) {
+        err = [err];
+      }
+      console.log(err.join(err.join('\n')));
+      err.map(function(e) { return e.stack || e; });
+      res.status(500).send('An error occured: ' + err.join('<br>'));
 
-      // Load all templates
-      return Q.all(templates).then(function(templateData) {
-
-        // Render mustache templates for each in the list.
-        renderList.forEach(function(obj, i) {
-
-          var c = render.createContext();
-          c.settings = obj.settings || {};
-          c.settingsJSON = JSON.stringify(obj.settings).replace(/<\/script>/g,'<\\/script>')
-          obj.componentHTML = render.renderMustache(templateData[i], c);
-        });
-
-        var context = render.createContext();
-        var names = Object.keys(settingsComponents);
-        names.unshift(name);
-
-        var prefix = render.prefixFactory(deps.DEPS_FOLDER);
-
-        util.traverseDeps(names, defs, function(comp) {
-          if (typeof comp.style === 'string') {
-            context.styles.push(prefix(comp.name, comp.style));
-          } else if (typeof comp.style !== 'undefined') {
-            context.styles = comp.style.map(function(u) {
-              return prefix(comp.name, u);
-            }).concat(context.styles);
-          }
-
-          if (typeof comp.script === 'string') {
-            context.scripts.unshift(prefix(comp.name, comp.script));
-          } else if (typeof comp.script !== 'undefined') {
-            context.scripts = comp.script.map(function(u) {
-              return prefix(comp.name, u);
-            }).concat(context.scripts);
-          }
-
-          if (comp.angular) {
-            context.modules[comp.angular] = true;
-          }
-        });
-
-        context.settings = settings;
-
-        // Since settingsJSON is going up to the server we need to clean out redundant code.
-        util.findComponentsInSettings(settings, function(obj) {
-          delete obj.settings;
-        }, true);
-
-        context.settingsJSON = JSON.stringify(settings).replace(/<\/script>/g,'<\\/script>');
-
-        context.angularBootstrap = 'angular.module("tws",["' +
-                                    Object.keys(context.modules).join('","') +
-                                   '"])\n' + 'angular.bootstrap(document,["tws"])';
-
-        // Lets render main mustache template;
-        return fs.read(path.join(
-          process.cwd(),
-          deps.DEPS_FOLDER,
-          name,
-          defs[name].template
-        )).then(function(template) {
-          res.send(render.renderMustache(template, context));
-        });
-
-      });
     });
-  }).fail(function(err) {
-    if (!Array.isArray(err)) {
-      err = [err];
-    }
-    console.log(err.join(err.join('\n')));
-    err.map(function(e) { return e.stack || e; });
-    res.status(500).send('An error occured: ' + err.join('<br>'));
-
   });
-});
 
-var server = app.listen(3000, function() {
-  console.log('Listening on port %d', server.address().port);
+  var server = app.listen(3000, function() {
+    console.log('Listening on port %d', server.address().port);
+  });
+
 });
