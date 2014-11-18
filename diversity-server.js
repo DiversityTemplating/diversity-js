@@ -47,6 +47,12 @@ Q.all([
     url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
   }),
 
+  
+  deps.updateDeps({
+    name: 'aficionado',
+    url: 'http://git.diversity.io/shop-themes/aficionado.git'
+  }),
+
   api('Webshop.get', [webshopUid, {url:'sv'}]).then(function(result) {
     webshopUrl = result.url.sv;
   })
@@ -55,7 +61,15 @@ Q.all([
   app.get('/reset', function(req, res) {
     // Reset skip list
     deps.reset();
-    res.send('OK');
+    deps.updateDeps({ //update aficionado
+      name: 'aficionado',
+      url: 'http://git.diversity.io/shop-themes/aficionado.git'
+    }).then(function(){
+      res.send('OK');
+    }, function() {
+      res.send(500);
+    })
+    
   });
 
   app.get('/*', function(req, res, next) {
