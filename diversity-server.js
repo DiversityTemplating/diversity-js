@@ -19,7 +19,7 @@ tinylr().listen(35729, function() {
 });
 
 if (process.argv.length < 4) {
-  console.log('Usage:\n     node diversity-server.js <webshopid> <themeid|settings.json> [<auth>]');
+  console.log('Usage:\n     node diversity-server.js <webshop-id> <theme-id|theme-name> [<auth>]');
   process.exit();
 }
 
@@ -47,30 +47,30 @@ Q.all([
     url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
   }),
 
-  
-  deps.updateDeps({
-    name: 'aficionado',
-    url: 'http://git.diversity.io/shop-themes/aficionado.git'
-  }),
+
+  //deps.updateDeps({
+  //  name: 'aficionado',
+  //  url: 'http://git.diversity.io/shop-themes/aficionado.git'
+  //}),
 
   api('Webshop.get', [webshopUid, {url:'sv'}]).then(function(result) {
     webshopUrl = result.url.sv;
   })
 ]).then(function() {
 
-  app.get('/reset', function(req, res) {
-    // Reset skip list
-    deps.reset();
-    deps.updateDeps({ //update aficionado
-      name: 'aficionado',
-      url: 'http://git.diversity.io/shop-themes/aficionado.git'
-    }).then(function(){
-      res.send('OK');
-    }, function() {
-      res.send(500);
-    })
-    
-  });
+  // app.get('/reset', function(req, res) {
+  //   // Reset skip list
+  //   deps.reset();
+  //   deps.updateDeps({ //update aficionado
+  //     name: 'aficionado',
+  //     url: 'http://git.diversity.io/shop-themes/aficionado.git'
+  //   }).then(function(){
+  //     res.send('OK');
+  //   }, function() {
+  //     res.send(500);
+  //   })
+  //
+  // });
 
   app.get('/*', function(req, res, next) {
 
@@ -79,46 +79,76 @@ Q.all([
       return next();
     }
 
+    // FIXME: unclutter this ugly mess
+    // Calculate settings and fetch the theme component
+    var fetchThemeCompAndJson = function(name) {
+      console.log('fetchThemeCompAndJson',name)
+      return deps.updateDeps({ // Since its not under webshop components we must give an url.
+        name: name,
+        url: 'http://git.diversity.io/shop-themes/' + name + '.git'
+        // The second updateDeps actually loads diversity.json
+      }).then(deps.updateDeps);
+    };
+
     var tid = parseInt(themeUid, 10);
     var settingsPromise;
+    var themeName;
+    var themeDiversityJson;
+    var defs;
     if (isNaN(tid)) {
-      //Its not a number but a settings file!
-      settingsPromise = fs.read(themeUid).then(deps.parseJSON).then(function(settings) {
-        return {params: {settings:settings}};
-      });
+      themeName = themeUid;
+      // Its not a number but a theme name!
+      // settings is just default from theme component.
+      settingsPromise = fetchThemeCompAndJson(themeName).then(function(comps) {
+                     defs = comps;
+                     themeDiversityJson = defs[themeName];
+                     var data = util.schemaDefaults(themeDiversityJson.settings);
+                     return {params: {settings: data}};
+                   });
     } else {
-      settingsPromise = api('Theme.get', [tid, true]);
+      settingsPromise = api('Theme.get', [tid, true]).then(function(settings) {
+        settings.params = settings.params || {component: 'aficionado'};
+
+        // So we got settings, we still need to merge with defaults from schema.
+        themeName = settings.params.component;
+
+        fetchThemeCompAndJson(themeName).then(function(comps) {
+          defs = comps;
+          themeDiversityJson = defs[themeName];
+          return {
+            params: {
+              settings: util.schemaDefaults(themeDiversityJson.settings, settings.params.settings || {}),
+            }
+          };
+        });
+      });
     }
 
     // We update dependencies and load theme each time so we always pick up changes.
     // This is for development people!
     settingsPromise.then(function(theme) {
-      var settings  = (theme.params && theme.params.settings) || {};
-      var name      = (theme.params && theme.params.component) || 'tws-theme';
-
-      // We want to load the supplied theme + any components in it's settins
+      var settings  = theme.params.settings;
+      // We want to load the supplied themes components
       var promises = [];
 
-      promises.push(deps.updateDeps(name));
-
-      var settingsComponents = {};
+      // We still might have tws-columns,tws-container etc in place of a component.
+      // therefore we can't just a shallowly check settings.component.
+      var names = [themeName];
       util.findComponentsInSettings(settings, function(c) {
-        settingsComponents[c.component] = true;
-      });
-
-      Object.keys(settingsComponents).forEach(function(n) {
-        promises.push(deps.updateDeps(n));
+        promises.push(deps.updateDeps(c.component));
+        names.push(c.component);
       });
 
       return Q.all(promises).then(function(result) {
-        var defs = result.reduce(function(soFar, obj) {
+        // Collect all diversity.json definitions
+        result.reduce(function(soFar, obj) {
           Object.keys(obj).forEach(function(k) {
             if (obj[k] !== undefined) {
               soFar[k] = obj[k];
             }
           });
           return soFar;
-        }, {});
+        }, defs);
 
         var renderList = [];
         var templates = [];
@@ -149,14 +179,11 @@ Q.all([
 
             var c = render.createContext(webshopUid, webshopUrl);
             c.settings = obj.settings || {};
-            c.settingsJSON = JSON.stringify(obj.settings).replace(/<\/script>/g,'<\\/script>')
+            c.settingsJSON = JSON.stringify(c.settings).replace(/<\/script>/g, '<\\/script>');
             obj.componentHTML = render.renderMustache(templateData[i], c);
           });
 
           var context = render.createContext(webshopUid, webshopUrl);
-          var names = Object.keys(settingsComponents);
-          names.unshift(name);
-
           var prefix = render.prefixFactory(deps.DEPS_FOLDER);
 
           util.traverseDeps(names, defs, function(comp) {
@@ -187,19 +214,19 @@ Q.all([
           util.findComponentsInSettings(settings, function(obj) {
             delete obj.settings;
           }, true);
-
-          context.settingsJSON = JSON.stringify(settings).replace(/<\/script>/g,'<\\/script>');
+          context.settingsJSON = JSON.stringify(settings).replace(/<\/script>/g, '<\\/script>');
 
           context.angularBootstrap = 'angular.module("tws",["' +
                                       Object.keys(context.modules).join('","') +
                                      '"])\n' + 'angular.bootstrap(document,["tws"])';
+          context.baseUrl = '/deps/' + themeName + '/';
 
           // Lets render main mustache template;
           return fs.read(path.join(
             process.cwd(),
             deps.DEPS_FOLDER,
-            name,
-            defs[name].template
+            themeName,
+            defs[themeName].template
           )).then(function(template) {
             res.send(render.renderMustache(template, context));
           });
