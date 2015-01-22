@@ -49,7 +49,7 @@ Q.all([
 
   //deps.updateDeps({
   //  name: 'aficionado',
-  //  url: 'http://git.diversity.io/shop-themes/aficionado.git'
+  //  url: 'http://git.diversity.io/themes/aficionado.git'
   //}),
 
   api('Webshop.get', [webshopUid, {url:'sv'}]).then(function(result) {
@@ -62,7 +62,7 @@ Q.all([
   //   deps.reset();
   //   deps.updateDeps({ //update aficionado
   //     name: 'aficionado',
-  //     url: 'http://git.diversity.io/shop-themes/aficionado.git'
+  //     url: 'http://git.diversity.io/themes/aficionado.git'
   //   }).then(function(){
   //     res.send('OK');
   //   }, function() {
@@ -83,7 +83,7 @@ Q.all([
     var fetchThemeCompAndJson = function(name) {
       return deps.updateDeps({ // Since its not under webshop components we must give an url.
         name: name,
-        url: 'http://git.diversity.io/shop-themes/' + name + '.git'
+        url: 'http://git.diversity.io/themes/' + name + '.git'
         // The second updateDeps actually loads diversity.json
       }).then(deps.updateDeps);
     };
