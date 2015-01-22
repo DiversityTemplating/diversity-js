@@ -37,10 +37,9 @@ app.use(bodyParser.json());
 app.use(express.static('.'));
 
 Q.all([
-  // We need tws-compontselector and jsquery.jsonrpcclient
-  deps.updateDeps('tws-admin-schema-form').fail(function(err) {
-    console.log(err);
-  }),
+  //deps.updateDeps('tws-admin-schema-form').fail(function(err) {
+  //  console.log(err);
+  //}),
 
   deps.updateDeps({
     name: 'jquery.jsonrpcclient.js',
@@ -82,7 +81,6 @@ Q.all([
     // FIXME: unclutter this ugly mess
     // Calculate settings and fetch the theme component
     var fetchThemeCompAndJson = function(name) {
-      console.log('fetchThemeCompAndJson',name)
       return deps.updateDeps({ // Since its not under webshop components we must give an url.
         name: name,
         url: 'http://git.diversity.io/shop-themes/' + name + '.git'
@@ -244,6 +242,7 @@ Q.all([
     });
   });
 
+  console.log('Starting server')
   var server = app.listen(3000, function() {
     console.log('Listening on port %d', server.address().port);
   });
