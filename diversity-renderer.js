@@ -329,8 +329,8 @@
                   " }",
                   " twsSessionProvider.setResetJsonRpcOnSession(true);",
                   "}]);",
-                  'angular.bootstrap(document.body,["diversity"' +
-                  (options.module ? ',"' + options.module +'"' :'') + ']);'
+                  'angular.bootstrap(document.body,[' +
+                  (options.module ? '"' + options.module +'",' :'') + '"diversity"]);'
             ];
             /* jscs: enable */
             console.log(setup.join('\n'))
