@@ -96,6 +96,13 @@ app.use(function (req, res, next) {
   }
 });
 
+
+app.get('/favicon.ico', function(req, res){
+  res.status(404).send('');
+});
+
+
+
 Q.all([
   //deps.updateDeps('tws-admin-schema-form').fail(function(err) {
   //  console.log(err);
@@ -175,6 +182,7 @@ Q.all([
     }
     // We update dependencies and load theme each time so we always pick up changes.
     // This is for development people!
+    console.log(req.url, req.theme)
     var settings  = req.theme.params.settings;
 
     var defs = req.componentDefs;
