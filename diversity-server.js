@@ -70,7 +70,7 @@ app.use(function (req, res, next) {
                    theme.params = theme.params || {component: 'aficionado'};
                    req.theme = theme;
                    next();
-                 }, function(err) {  console.log('oh noes error!', err);  });
+                 }, function(err) {  console.log('oh noes error!', err); });
   } else {
     api('Theme.get', [tid, true]).then(function(settings) {
       settings.params = settings.params || {component: 'aficionado'};
@@ -82,7 +82,7 @@ app.use(function (req, res, next) {
         req.themeDiversityJson = req.componentDefs[req.themeName];
         return {
           params: {
-            settings: util.schemaDefaults(req.themeDiversityJson.settings, settings.params.settings || {}),
+            settings: settings.params.settings//util.schemaDefaults(req.themeDiversityJson.settings, settings.params.settings || {}),
           }
         };
       });
