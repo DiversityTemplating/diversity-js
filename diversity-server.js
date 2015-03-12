@@ -57,7 +57,6 @@ app.use(function (req, res, next) {
   };
 
   var tid = parseInt(themeUid, 10);
-  var defs;
   if (isNaN(tid)) {
     req.themeName = themeUid;
     // Its not a number but a theme name!
@@ -71,17 +70,16 @@ app.use(function (req, res, next) {
                    theme.params = theme.params || {component: 'aficionado'};
                    req.theme = theme;
                    next();
-                 }, function(err) {  console.log('oh noes error!', err); throw err });
+                 }, function(err) {  console.log('oh noes error!', err);  });
   } else {
     api('Theme.get', [tid, true]).then(function(settings) {
       settings.params = settings.params || {component: 'aficionado'};
 
       // So we got settings, we still need to merge with defaults from schema.
       req.themeName = settings.params.component;
-
-      fetchThemeCompAndJson(req.themeName).then(function(comps) {
+      return fetchThemeCompAndJson(req.themeName).then(function(comps) {
         req.componentDefs = comps;
-        req.themeDiversityJson = defs[req.themeName];
+        req.themeDiversityJson = req.componentDefs[req.themeName];
         return {
           params: {
             settings: util.schemaDefaults(req.themeDiversityJson.settings, settings.params.settings || {}),
@@ -92,10 +90,9 @@ app.use(function (req, res, next) {
       theme.params = theme.params || {component: 'aficionado'};
       req.theme = theme;
       next();
-    });
+    }, function(err) { console.log('oh man!', err);});
   }
 });
-
 
 app.get('/favicon.ico', function(req, res){
   res.status(404).send('');
@@ -122,7 +119,9 @@ Q.all([
   api('Webshop.get', [webshopUid, {url:'sv'}]).then(function(result) {
     webshopUrl = result.url.sv;
   })
-]).then(function() {
+]).then(function(res) {
+
+  console.log(res)
 
   // app.get('/reset', function(req, res) {
   //   // Reset skip list
