@@ -13,17 +13,18 @@ var apiFactory = require('./lib/api.js').factory;
 var render     = require('./lib/render.js');
 var deps       = require('./lib/deps.js');
 
-var sass = require('node-sass');
 
-// Start a tiny-lr server as well.
-//tinylr().listen(35729, function() {
-//  console.log('... Listening on 35729 ...');
-//});
+// Sass is an optional dependecy
+try {
+  var sass = require('node-sass');
+}
 
-if (process.argv.length < 4) {
-  console.log('Usage:\n     node diversity-server.js <webshop-id> <theme-id|theme-name> [<auth>]');
+if (process.argv[2] === '--help') {
+  console.log('Usage:\n     node diversity-server.js');
   process.exit();
 }
+
+
 
 var webshopUid = process.argv[2];
 var webshopUrl;
