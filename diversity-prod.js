@@ -236,13 +236,22 @@ app.get('*', function(req, res) {
       // It might already be loaded.
       if (!components[obj.component]) {
         components[obj.component] = true; //stop anyone else loading it.
-        return diversity.getDiveristyJson(obj.component, obj.version).then(function(json) {
+        return diversity.getDiveristyJson(
+          DIVERSITY_URL,
+          obj.component,
+          obj.version
+        ).then(function(json) {
           components[obj.component] = json;
           var promises = [];
 
           if (json.template) {
             promises.push(
-              diversity.getFile(json.name, json.version, json.template).then(function(data) {
+              diversity.getFile(
+                DIVERSITY_URL,
+                json.name,
+                json.version,
+                json.template
+              ).then(function(data) {
                 templates[json.name] = data;
               }, function() {
                 console.log('Could not load template for ', json.name);
@@ -253,6 +262,7 @@ app.get('*', function(req, res) {
           if (json.i18n && json.i18n[language] && json.i18n[language].view) {
             promises.push(
               diversity.getFile(
+                DIVERSITY_URL,
                 json.name,
                 json.version,
                 json.i18n[language].view
