@@ -17,7 +17,7 @@ var deps       = require('./lib/deps.js');
 var cookieParser = require('cookie-parser');
 
 var DIVERSITY_URL = 'https://api.diversity.io/';
-var API_URL       = 'shop.textalk.se/backend/jsonrpc/v1/';
+var API_URL       = 'davidstage.textalk.se/backend/jsonrpc/v1/';
 
 if (process.argv[2] === '--help') {
   console.log('Usage:\n     node diversity-prod.js');
@@ -31,6 +31,8 @@ var cache = LRU({max: 2000, maxAge: 1000*60*5});
 app.use(cookieParser());
 
 var pageUrlInfo = function(url) {
+  //Always use http when querying the Url API
+  url = url.replace('https://', 'http://');
   return api.call('Url.get', [url, true], {apiUrl: API_URL}).then(function(info) {
     if (info.type === 'Moved') {
       if (url === info.url) {
@@ -147,6 +149,19 @@ app.get('*', function(req, res) {
     req.language = info.language;
     req.webshop  = info.webshop;
 
+
+    var themeSelect = function() {
+      console.log('doing theme select');
+      return api.call('Theme.select', true, {
+        apiUrl: API_URL,
+        webshop: info.webshop,
+        language: info.language,
+        headers: {
+          'user-agent': req.headers['user-agent']
+        }
+      });
+    };
+
     if (req.cookies['theme_id']) {
       // Theme id can have a preview auth token
       var split = req.cookies['theme_id'].split(';');
@@ -167,19 +182,9 @@ app.get('*', function(req, res) {
         'Theme.get',
         [themeId],
         {webshop: info.webshop, language: info.language, auth: auth, apiUrl: API_URL}
-      );
+      ).catch(themeSelect); //On error do a theme select
     } else {
-
-      // Do Theme.select
-      console.log('doing theme select')
-      return api.call('Theme.select', true, {
-        apiUrl: API_URL,
-        webshop: info.webshop,
-        language: info.language,
-        headers: {
-          'user-agent': req.headers['user-agent']
-        }
-      });
+      return themeSelect();
     }
   }).then(function(theme) {
     req.theme = theme;
