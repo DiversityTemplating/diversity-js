@@ -102,6 +102,8 @@ app.get('*', function(req, res) {
 
     var url = req.protocol + '://' + req.hostname + req.path;
 
+
+
     delete req.query.previewkey;
     delete req.query.theme_id;
 
@@ -151,7 +153,8 @@ app.get('*', function(req, res) {
     } else {
 
       // Do Theme.select
-      return api.call('Theme.select', {
+      console.log('doing theme select')
+      return api.call('Theme.select', true, {
         apiUrl: API_URL,
         webshop: info.webshop,
         language: info.language,
@@ -162,7 +165,6 @@ app.get('*', function(req, res) {
     }
   }).then(function(theme) {
     req.theme = theme;
-
     // TODO: rafactor into middleware and get rid of this hack!
 
     if (theme === 'cached') {
