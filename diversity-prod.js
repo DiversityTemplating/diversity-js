@@ -3,7 +3,7 @@ var Q          = require('q');
 var fs         = require('q-io/fs');
 var http       = require('q-io/http');
 var LRU        = require('lru-cache');
-
+var url        = require('url');
 var path       = require('path');
 var express    = require('express');
 var semver     = require('semver');
@@ -89,9 +89,23 @@ app.get('/css/*', function(req, res) {
 });
 
 
+// Handle queries on localhost
+app.use(function(req, res, next) {
 
-// TODO: refactor into middleware
-app.get('*', function(req, res) {
+  if (req.query.shopUrl) {
+    req.urlOverride = url.parse(req.query.shopUrl, true);
+    req.shopUrl = req.urlOverride.protocol +'//'+ req.urlOverride.hostname + req.urlOverride.path;
+    console.log('rewrote url!');
+  } else {
+    req.shopUrl = req.protocol +'://'+ req.hostname + req.url;
+  }
+
+  next();
+});
+
+
+// Handle redirects on previewkey request parameters
+app.use(function(req, res, next) {
 
   // Check if we have previewkey req parameter
   if (req.query.previewkey && req.query.theme_id){
@@ -100,9 +114,7 @@ app.get('*', function(req, res) {
       req.query.theme_id + ';' + req.query.previewkey
     );
 
-    var url = req.protocol + '://' + req.hostname + req.path;
-
-
+    var url = req.path;
 
     delete req.query.previewkey;
     delete req.query.theme_id;
@@ -119,11 +131,17 @@ app.get('*', function(req, res) {
     res.redirect(url);
     return;
   }
+  next();
+});
 
+// TODO: refactor into middleware
+app.get('*', function(req, res) {
   req.diversity = {};
-  console.log(req.url, req.hostname);
+
+  console.log(req.shopUrl);
+
   // First we checkout what webshop where on.
-  pageUrlInfo(req.protocol +'://'+ req.hostname + req.url).then(function(info) {  // <-- in a middleware?
+  pageUrlInfo(req.shopUrl).then(function(info) {  // <-- in a middleware?
 
     //TODO: check if something whent wrong.
     req.language = info.language;
@@ -267,7 +285,7 @@ app.get('*', function(req, res) {
       console.log('Nr of components ', Object.keys(components).length);
 
       // TODO: Not sure if this is correct
-      var webshopUrl = req.protocol + '://' + req.hostname + '/';
+      var webshopUrl = req.shopUrl;
 
       // Time to render templates
       util.findComponentsInSettings(req.theme.params.settings || {}, function(obj) {
