@@ -16,6 +16,8 @@ var render     = require('./lib/render.js');
 var deps       = require('./lib/deps.js');
 var cookieParser = require('cookie-parser');
 
+var compress = require('compression');
+
 var DIVERSITY_URL = 'https://api.diversity.io/';
 var API_URL       = 'shop.textalk.se/backend/jsonrpc/v1/';
 
@@ -28,7 +30,10 @@ if (process.argv[2] === '--help') {
 // Set up simple lru page caching
 var cache = LRU({max: 2000, maxAge: 1000*60*5});
 
+app.use(compress());
 app.use(cookieParser());
+
+
 
 var pageUrlInfo = function(url, dontCatch) {
   //Always use http when querying the Url API
