@@ -41,6 +41,7 @@ var pageUrlInfo = function(url, dontCatch) {
       }
       return pageUrlInfo(info.url);
     }
+    info.shopUrl = url;
     return info;
   });
 
@@ -144,6 +145,8 @@ app.get('*', function(req, res) {
 
   // First we checkout what webshop where on.
   pageUrlInfo(req.shopUrl).then(function(info) {  // <-- in a middleware?
+    console.log('shop url before ', req.shopUrl, 'after', info.shopUrl);
+    req.shopUrl = info.shopUrl || req.shopUrl;
 
     //TODO: check if something whent wrong.
     req.language = info.language;
