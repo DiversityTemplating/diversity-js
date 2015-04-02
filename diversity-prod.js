@@ -64,6 +64,11 @@ app.get('/backend/ha/check.txt', function(req, res) {
   res.send('ok');
 });
 
+app.get('/backend/stats/cache.txt', function(req, res) {
+  var keys = cache.keys();
+  res.send('Nr of keys: ' + keys.length + '\n' + JSON.stringify(keys, undefined, 2));
+});
+
 /**
  * Support old style tws-theme css
  */
