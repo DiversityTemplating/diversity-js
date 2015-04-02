@@ -17,7 +17,7 @@ var deps       = require('./lib/deps.js');
 var cookieParser = require('cookie-parser');
 
 var DIVERSITY_URL = 'https://api.diversity.io/';
-var API_URL       = 'davidstage.textalk.se/backend/jsonrpc/v1/';
+var API_URL       = 'shop.textalk.se/backend/jsonrpc/v1/';
 
 if (process.argv[2] === '--help') {
   console.log('Usage:\n     node diversity-prod.js');
@@ -140,13 +140,16 @@ app.get('*', function(req, res) {
     req.webshop  = info.webshop;
 
     var themeSelect = function() {
+      var headers = {'user-agent': req.headers['user-agent']};
+      if (headers['user-agent'].indexOf('Prerender')) {
+	console.log("Swapping user-agent to prerender");
+	headers['user-agent'] = "Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/19.0.1084.60 Mobile/9B206 Safari/7534.48.3";
+      }
       return api.call('Theme.select', true, {
         apiUrl: API_URL,
         webshop: info.webshop,
         language: info.language,
-        headers: {
-          'user-agent': req.headers['user-agent']
-        }
+        headers: headers
       });
     };
 
@@ -199,7 +202,7 @@ app.get('*', function(req, res) {
 
     // Old theme or new theme?
     if (theme.params.component === 'tws-theme') {
-      req.swsUrl = 'css/'; // Old style
+      req.swsUrl = '/sws/'; // Old style
     } else {
       req.swsUrl = DIVERSITY_URL;
     }
@@ -356,11 +359,11 @@ app.get('*', function(req, res) {
       res.send(html);
 
       cache.set(req.webshop + '/' + req.theme.uid, html);
-      console.log('Returning renderered content for ', key, Date.now() - req.requestStartTime);
+      console.log('Returning renderered content for ',req.url, key, Date.now() - req.requestStartTime);
     });
 
   }).catch(function(err) {
-    console.log(err);
+    console.log("Returning 500: ", req.url, err);
     res.status(500).send('Internal server error.');
   });
 });
@@ -369,6 +372,6 @@ app.get('*', function(req, res) {
 
 
 console.log('Starting server')
-var server = app.listen(process.env.PORT || 3000, function() {
+var server = app.listen(process.env.PORT || 3030, function() {
   console.log('Listening on port %d', server.address().port);
 });
