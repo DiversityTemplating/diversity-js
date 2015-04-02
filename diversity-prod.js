@@ -64,13 +64,8 @@ app.get('/css/*', function(req, res) {
     return;
   }
 
-  console.log(req.url.substring(19))
   var url = DIVERSITY_URL + 'components/old-aficionado/*/css/' + req.url.substring(19);
-  /*var query = Object.keys(req.query).map(function(name) {
-    return name + '=' + req.query[value];
-  }).join('&');
-*/
-  console.log(url);
+
   var request = {
     url: url,
     charset: 'UTF-8',
@@ -78,7 +73,6 @@ app.get('/css/*', function(req, res) {
   };
   return http.request(request).then(function(response) {
     if (response.status !== 200) {
-      console.log('Not 200', response);
       res.status(404).send('Not found.');
     }
 
@@ -90,14 +84,12 @@ app.get('/css/*', function(req, res) {
   });
 });
 
-
 // Handle queries on localhost
 app.use(function(req, res, next) {
 
   if (req.query.shopUrl) {
     req.urlOverride = url.parse(req.query.shopUrl, true);
     req.shopUrl = req.urlOverride.protocol +'//'+ req.urlOverride.hostname + req.urlOverride.path;
-    console.log('rewrote url!');
   } else {
     req.shopUrl = req.protocol +'://'+ req.hostname + req.url;
   }
@@ -129,7 +121,6 @@ app.use(function(req, res, next) {
     if (query.length > 0) {
       url += '?' + query;
     }
-    console.log('Redirecting to:', url);
     res.redirect(url);
     return;
   }
@@ -138,9 +129,8 @@ app.use(function(req, res, next) {
 
 // TODO: refactor into middleware
 app.get('*', function(req, res) {
+  req.requestStartTime = Date.now();
   req.diversity = {};
-
-  console.log(req.shopUrl);
 
   // First we checkout what webshop where on.
   pageUrlInfo(req.shopUrl).then(function(info) {  // <-- in a middleware?
@@ -149,9 +139,7 @@ app.get('*', function(req, res) {
     req.language = info.language;
     req.webshop  = info.webshop;
 
-
     var themeSelect = function() {
-      console.log('doing theme select');
       return api.call('Theme.select', true, {
         apiUrl: API_URL,
         webshop: info.webshop,
@@ -172,8 +160,8 @@ app.get('*', function(req, res) {
       if (!isNaN(themeId)) {
         var key = info.webshop + '/' + themeId;
         if (cache.has(key)) {
-          console.log('returning cached content for ', key);
           res.send(cache.get(key));
+          console.log('Returning cached content for ', key, Date.now() - req.requestStartTime);
           return 'cached';
         }
       }
@@ -194,12 +182,12 @@ app.get('*', function(req, res) {
       return;
     }
 
-    // Check cache
+    // Check cache.
     if (theme.uid) {
       var key = req.webshop + '/' + theme.uid;
       if (cache.has(key)) {
-        console.log('returning cached content for ', key);
         res.send(cache.get(key));
+        console.log('Returning cached content for ', key, Date.now() - req.requestStartTime);
         return;
       }
     }
@@ -259,7 +247,7 @@ app.get('*', function(req, res) {
               ).then(function(data) {
                 templates[json.name] = data;
               }, function() {
-                console.log('Could not load template for ', json.name);
+                //console.log('Could not load template for ', json.name);
               })
             );
           }
@@ -275,7 +263,7 @@ app.get('*', function(req, res) {
                 translations[json.name] = data;
               }, function() {
                 // Errors here sould not stop all loading.
-                console.log('Could not load translation for ', json.name);
+                //console.log('Could not load translation for ', json.name);
               })
             );
           }
@@ -297,7 +285,6 @@ app.get('*', function(req, res) {
       }
     };
     return Q.all(componentsToLoad.map(loadComponent)).then(function() {
-      console.log('Nr of components ', Object.keys(components).length);
 
       // TODO: Not sure if this is correct
       var webshopUrl = req.shopUrl;
@@ -369,6 +356,7 @@ app.get('*', function(req, res) {
       res.send(html);
 
       cache.set(req.webshop + '/' + req.theme.uid, html);
+      console.log('Returning renderered content for ', key, Date.now() - req.requestStartTime);
     });
 
   }).catch(function(err) {
