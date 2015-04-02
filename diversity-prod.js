@@ -3,7 +3,7 @@ var Q          = require('q');
 var fs         = require('q-io/fs');
 var http       = require('q-io/http');
 var LRU        = require('lru-cache');
-var url        = require('url');
+var Url        = require('url');
 var path       = require('path');
 var express    = require('express');
 var semver     = require('semver');
@@ -30,10 +30,10 @@ var cache = LRU({max: 2000, maxAge: 1000*60*5});
 
 app.use(cookieParser());
 
-var pageUrlInfo = function(url) {
+var pageUrlInfo = function(url, dontCatch) {
   //Always use http when querying the Url API
   url = url.replace('https://', 'http://');
-  return api.call('Url.get', [url, true], {apiUrl: API_URL}).then(function(info) {
+  var promise = api.call('Url.get', [url, true], {apiUrl: API_URL}).then(function(info) {
     if (info.type === 'Moved') {
       if (url === info.url) {
         console.log('Stopping page url loop');
@@ -43,6 +43,16 @@ var pageUrlInfo = function(url) {
     }
     return info;
   });
+
+  if (!dontCatch) {
+    return promise.catch(function() {
+      // If we err out we do another check, but this time with just the domain part.
+      var parsed = Url.parse(url);
+      console.log('Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
+      return pageUrlInfo('http://' + parsed.hostname + '/', true);
+    });
+  }
+  return promise;
 };
 
 app.get('/favicon.ico', function(req, res) {
@@ -88,7 +98,7 @@ app.get('/css/*', function(req, res) {
 app.use(function(req, res, next) {
 
   if (req.query.shopUrl) {
-    req.urlOverride = url.parse(req.query.shopUrl, true);
+    req.urlOverride = Url.parse(req.query.shopUrl, true);
     req.shopUrl = req.urlOverride.protocol +'//'+ req.urlOverride.hostname + req.urlOverride.path;
   } else {
     req.shopUrl = req.protocol +'://'+ req.hostname + req.url;
