@@ -248,13 +248,15 @@ app.get('*', function(req, res) {
       req.swsUrl = DIVERSITY_URL;
     }
 
+    // Until api handles ^ versions we go with *
     var componentsToLoad = [{
       component: theme.params.component,
-      version: theme.params.version || '*'
+      version: '*' //theme.params.version || '*'
     }];
 
+    // Until api handles ^ versions we go with *
     util.findComponentsInSettings(theme.params.settings || {}, function(comp) {
-      comp.version = comp.version || '*';
+      comp.version = '*'; //comp.version || '*';
       componentsToLoad.push(comp);
     });
 
