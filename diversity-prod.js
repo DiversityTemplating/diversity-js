@@ -33,11 +33,29 @@ var cache = LRU({max: 2000, maxAge: 1000*60*5});
 app.use(compress());
 app.use(cookieParser());
 
-
+var RE_JUST_STAGE = /^http:\/\/([a-zA-Z]+)stage.textalk.se/;
+var RE_DOMAIN_THEN_STAGE = /^http:\/\/.*(\.[a-zA-Z]+stage.textalk.se)/;
 
 var pageUrlInfo = function(url, dontCatch) {
   //Always use http when querying the Url API
   url = url.replace('https://', 'http://');
+
+  // Handle stage url:s
+  if (url.indexOf('stage.textalk.se') !== -1) {
+    // Lets rewrite it!
+    // someonestage.textalk.se -> jenkinsstage.textalk.se
+    var stage = RE_JUST_STAGE.exec(url);
+    if (stage) {
+      url = url.replace(stage[1], 'jenkins');
+    } else {
+      // or
+      // shop.heynicebeard.com.someonestage.textalk.se -> shop.heynicebeard.com
+      stage = RE_DOMAIN_THEN_STAGE.exec(url);
+      url = url.replace(stage[1], '');
+    }
+    console.log('Rewrote stage url to', url);
+  }
+
   var promise = api.call('Url.get', [url, true], {apiUrl: API_URL}).then(function(info) {
     if (info.type === 'Moved') {
       if (url === info.url) {
