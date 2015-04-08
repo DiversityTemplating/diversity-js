@@ -18,17 +18,30 @@ var cookieParser = require('cookie-parser');
 
 var compress = require('compression');
 
-var DIVERSITY_URL = 'https://api.diversity.io/';
-var API_URL       = 'shop.textalk.se/backend/jsonrpc/v1/';
-
 if (process.argv[2] === '--help') {
-  console.log('Usage:\n     node diversity-prod.js');
+  console.log('Usage:\n     node diversity-prod.js [<config-file>]');
   process.exit();
 }
 
+// Read config file if present.
+var config = {};
+var configFile = process.argv[2] || './config.json';
+
+try {
+  config = JSON.parse(require('fs').readFileSync(configFile));
+  console.log('Read config from', configFile, config);
+} catch (e) {
+  console.log('Could not load config file ', process.argv[2], e);
+}
+
+config.diversityUrl = config.diversityUrl || 'https://api.diversity.io/';
+config.apiUrl       = config.apiUrl       || 'shop.textalk.se/backend/jsonrpc/v1/';
+config.swsUrlOld    = config.swsUrlOld    || '/sws/';
+config.cacheTTL     = config.cacheTTL     || 1000 * 60 * 5;
+config.port         = config.port         || process.env.PORT || 3030;
 
 // Set up simple lru page caching
-var cache = LRU({max: 2000, maxAge: 1000*60*5});
+var cache = LRU({max: 2000, maxAge: config.cacheTTL});
 
 app.use(compress());
 app.use(cookieParser());
@@ -56,7 +69,7 @@ var pageUrlInfo = function(url, dontCatch) {
     console.log('Rewrote stage url to', url);
   }
 
-  var promise = api.call('Url.get', [url, true], {apiUrl: API_URL}).then(function(info) {
+  var promise = api.call('Url.get', [url, true], {apiUrl: config.apiUrl}).then(function(info) {
     if (info.type === 'Moved') {
       if (url === info.url) {
         console.log('Stopping page url loop');
@@ -72,7 +85,7 @@ var pageUrlInfo = function(url, dontCatch) {
     return promise.catch(function() {
       // If we err out we do another check, but this time with just the domain part.
       var parsed = Url.parse(url);
-      console.log('Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
+      //console.log('Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
       return pageUrlInfo('http://' + parsed.hostname + '/', true);
     });
   }
@@ -103,7 +116,7 @@ app.get('/css/*', function(req, res) {
     return;
   }
 
-  var url = DIVERSITY_URL + 'components/old-aficionado/*/css/' + req.url.substring(19);
+  var url = config.diversityUrl + 'components/old-aficionado/*/css/' + req.url.substring(19);
 
   var request = {
     url: url,
@@ -173,7 +186,6 @@ app.get('*', function(req, res) {
 
   // First we checkout what webshop where on.
   pageUrlInfo(req.shopUrl).then(function(info) {  // <-- in a middleware?
-    console.log('shop url before ', req.shopUrl, 'after', info.shopUrl);
     req.shopUrl = info.shopUrl || req.shopUrl;
 
     //TODO: check if something whent wrong.
@@ -183,11 +195,10 @@ app.get('*', function(req, res) {
     var themeSelect = function() {
       var headers = {'user-agent': req.headers['user-agent']};
       if (headers['user-agent'].indexOf('Prerender')) {
-	console.log("Swapping user-agent to prerender");
-	headers['user-agent'] = "Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/19.0.1084.60 Mobile/9B206 Safari/7534.48.3";
+	       headers['user-agent'] = "Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/19.0.1084.60 Mobile/9B206 Safari/7534.48.3";
       }
       return api.call('Theme.select', true, {
-        apiUrl: API_URL,
+        apiUrl: config.apiUrl,
         webshop: info.webshop,
         language: info.language,
         headers: headers
@@ -213,7 +224,7 @@ app.get('*', function(req, res) {
       return api.call(
         'Theme.get',
         [themeId],
-        {webshop: info.webshop, language: info.language, auth: auth, apiUrl: API_URL}
+        {webshop: info.webshop, language: info.language, auth: auth, apiUrl: config.apiUrl}
       ).catch(themeSelect); //On error do a theme select
     } else {
       return themeSelect();
@@ -243,9 +254,9 @@ app.get('*', function(req, res) {
 
     // Old theme or new theme?
     if (theme.params.component === 'tws-theme') {
-      req.swsUrl = '/sws/'; // Old style
+      req.swsUrl = config.swsUrlOld; // Old style
     } else {
-      req.swsUrl = DIVERSITY_URL;
+      req.swsUrl = config.diversityUrl;
     }
 
     // Until api handles ^ versions we go with *
@@ -276,7 +287,7 @@ app.get('*', function(req, res) {
       if (!components[obj.component]) {
         components[obj.component] = true; //stop anyone else loading it.
         return diversity.getDiveristyJson(
-          DIVERSITY_URL,
+          config.diversityUrl,
           obj.component,
           obj.version
         ).then(function(json) {
@@ -286,7 +297,7 @@ app.get('*', function(req, res) {
           if (json.template) {
             promises.push(
               diversity.getFile(
-                DIVERSITY_URL,
+                config.diversityUrl,
                 json.name,
                 json.version,
                 json.template
@@ -301,7 +312,7 @@ app.get('*', function(req, res) {
           if (json.i18n && json.i18n[language] && json.i18n[language].view) {
             promises.push(
               diversity.getFile(
-                DIVERSITY_URL,
+                config.diversityUrl,
                 json.name,
                 json.version,
                 json.i18n[language].view
@@ -340,7 +351,7 @@ app.get('*', function(req, res) {
         // findComponentsInSettings goes depth first and applies children before parents
         var def = components[obj.component];
         if (def.template) {
-          var c = render.createContext(req.webshop, webshopUrl, API_URL, req.swsUrl, DIVERSITY_URL, def);
+          var c = render.createContext(req.webshop, webshopUrl, config.apiUrl, req.swsUrl, config.diversityUrl, def);
           c.settings = obj.settings || {};
           c.settingsJSON = JSON.stringify(c.settings).replace(/<\/script>/g, '<\\/script>');
           obj.componentHTML = render.renderMustache(templates[obj.component], c, req.language);
@@ -351,12 +362,12 @@ app.get('*', function(req, res) {
       var context = render.createContext(
         req.webshop,
         webshopUrl,
-        API_URL,
+        config.apiUrl,
         req.swsUrl,
-        DIVERSITY_URL,
+        config.diversityUrl,
         components[req.theme.params.component]
       );
-      var prefix = render.prefixFactory(DIVERSITY_URL);
+      var prefix = render.prefixFactory(config.diversityUrl);
 
       util.traverseDeps(Object.keys(components), components, function(comp) {
         if (typeof comp.style === 'string') {
@@ -421,6 +432,6 @@ app.get('*', function(req, res) {
 
 
 console.log('Starting server')
-var server = app.listen(process.env.PORT || 3030, function() {
+var server = app.listen(config.port, function() {
   console.log('Listening on port %d', server.address().port);
 });
