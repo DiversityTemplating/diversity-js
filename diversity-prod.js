@@ -85,7 +85,7 @@ var pageUrlInfo = function(url, dontCatch) {
     return promise.catch(function() {
       // If we err out we do another check, but this time with just the domain part.
       var parsed = Url.parse(url);
-      //console.log('Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
+      console.log('Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
       return pageUrlInfo('http://' + parsed.hostname + '/', true);
     });
   }
@@ -213,10 +213,10 @@ app.get('*', function(req, res) {
 
       // Check cache
       if (!isNaN(themeId)) {
-        var key = info.webshop + '/' + themeId;
+        var key = info.webshop + '/' + themeId + '/' + info.language;
         if (cache.has(key)) {
           res.send(cache.get(key));
-          console.log('Returning cached content for ', key, Date.now() - req.requestStartTime);
+          console.log('Theme Cookie: Returning cached content for ', key, Date.now() - req.requestStartTime);
           return 'cached';
         }
       }
@@ -232,17 +232,20 @@ app.get('*', function(req, res) {
   }).then(function(theme) {
     req.theme = theme;
     // TODO: rafactor into middleware and get rid of this hack!
-
+  
     if (theme === 'cached') {
       return;
     }
 
+    req.key = req.webshop + '/' + theme.uid + '/' + req.language;
+
     // Check cache.
     if (theme.uid) {
-      var key = req.webshop + '/' + theme.uid;
-      if (cache.has(key)) {
-        res.send(cache.get(key));
-        console.log('Returning cached content for ', key, Date.now() - req.requestStartTime);
+      
+      console.log('cache key', req.key)
+      if (cache.has(req.key)) {
+        res.send(cache.get(req.key));
+        console.log('Returning cached content for ', req.key, Date.now() - req.requestStartTime);
         return;
       }
     }
@@ -342,8 +345,6 @@ app.get('*', function(req, res) {
       }
     };
     return Q.all(componentsToLoad.map(loadComponent)).then(function() {
-
-      // TODO: Not sure if this is correct
       var webshopUrl = req.shopUrl;
 
       // Time to render templates
@@ -418,13 +419,13 @@ app.get('*', function(req, res) {
       var html = render.renderMustache(templates[req.theme.params.component], context, req.language);
       res.send(html);
 
-      cache.set(req.webshop + '/' + req.theme.uid, html);
-      console.log('Returning renderered content for ',req.url, key, Date.now() - req.requestStartTime);
+      cache.set(req.key, html);
+      console.log('Returning renderered content for ',req.url, req.key, Date.now() - req.requestStartTime);
     });
 
   }).catch(function(err) {
     console.log("Returning 500: ", req.url, err);
-    res.status(500).send('Internal server error.');
+    res.status(500).send('<!doctype html><html lang="en"><head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>Internal Server Error</title> <link href="http://fonts.googleapis.com/css?family=Droid+Sans" rel="stylesheet" type="text/css"> <style>html, body{background: #333; color: #fefefe; font-size: 22px; font-family: "Droid Sans", Verdana, Geneva, sans-serif;}body{padding: 25px; text-align: center;}</style></head><body> <h1>Internal Server Error (500)</h1> <h3>We are sorry, but something has gone really wrong.</h3> <p> Rest assured that we have logged the error and are looking into it as soon as possible.<br/> Try reloading the page in a little while. </p></body></html>');
   });
 });
 
