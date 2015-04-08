@@ -25,7 +25,7 @@ if (process.argv[2] === '--help') {
 
 // Read config file if present.
 var config = {};
-var configFile = process.argv[2] || './config.json';
+var configFile = process.argv[2] || path.resolve(__dirname,'config.json');
 
 try {
   config = JSON.parse(require('fs').readFileSync(configFile));
