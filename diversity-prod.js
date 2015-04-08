@@ -340,7 +340,7 @@ app.get('*', function(req, res) {
         // findComponentsInSettings goes depth first and applies children before parents
         var def = components[obj.component];
         if (def.template) {
-          var c = render.createContext(req.webshop, webshopUrl, API_URL, req.swsUrl);
+          var c = render.createContext(req.webshop, webshopUrl, API_URL, req.swsUrl, DIVERSITY_URL, def);
           c.settings = obj.settings || {};
           c.settingsJSON = JSON.stringify(c.settings).replace(/<\/script>/g, '<\\/script>');
           obj.componentHTML = render.renderMustache(templates[obj.component], c, req.language);
@@ -348,7 +348,7 @@ app.get('*', function(req, res) {
       });
 
       // Ok, time to render the theme Mustache
-      var context = render.createContext(req.webshop, webshopUrl, API_URL, req.swsUrl);
+      var context = render.createContext(req.webshop, webshopUrl, API_URL, req.swsUrl, DIVERSITY_URL, req.theme);
       var prefix = render.prefixFactory(DIVERSITY_URL);
 
       util.traverseDeps(Object.keys(components), components, function(comp) {
@@ -395,7 +395,6 @@ app.get('*', function(req, res) {
       context.angularBootstrap = 'angular.module("tws",["' +
                                   Object.keys(context.modules).join('","') +
                                  '"])\n' + 'angular.bootstrap(document,["tws"])';
-      context.baseUrl = '/deps/' + req.themeName + '/';
 
       // Lets render main mustache template, and send it.
       var html = render.renderMustache(templates[req.theme.params.component], context, req.language);
