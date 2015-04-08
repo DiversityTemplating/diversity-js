@@ -348,7 +348,14 @@ app.get('*', function(req, res) {
       });
 
       // Ok, time to render the theme Mustache
-      var context = render.createContext(req.webshop, webshopUrl, API_URL, req.swsUrl, DIVERSITY_URL, req.theme);
+      var context = render.createContext(
+        req.webshop,
+        webshopUrl,
+        API_URL,
+        req.swsUrl,
+        DIVERSITY_URL,
+        components[req.theme.params.component]
+      );
       var prefix = render.prefixFactory(DIVERSITY_URL);
 
       util.traverseDeps(Object.keys(components), components, function(comp) {
