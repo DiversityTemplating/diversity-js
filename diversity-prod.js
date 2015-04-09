@@ -211,10 +211,15 @@ app.get('*', function(req, res) {
       var themeId = parseInt(split[0], 10);
       var auth = split[1]; // can be undefined, thats fine.
 
+      // Don't use cache when previewing
+      if (auth) {
+        req.dontCache = true;
+      }
+
       // Check cache
       if (!isNaN(themeId)) {
         var key = info.webshop + '/' + themeId + '/' + info.language;
-        if (cache.has(key)) {
+        if (!req.dontCache && cache.has(key)) {
           res.send(cache.get(key));
           console.log('Theme Cookie: Returning cached content for ', key, Date.now() - req.requestStartTime);
           return 'cached';
@@ -232,7 +237,7 @@ app.get('*', function(req, res) {
   }).then(function(theme) {
     req.theme = theme;
     // TODO: rafactor into middleware and get rid of this hack!
-  
+
     if (theme === 'cached') {
       return;
     }
@@ -241,9 +246,7 @@ app.get('*', function(req, res) {
 
     // Check cache.
     if (theme.uid) {
-      
-      console.log('cache key', req.key)
-      if (cache.has(req.key)) {
+      if (!req.dontCache && cache.has(req.key)) {
         res.send(cache.get(req.key));
         console.log('Returning cached content for ', req.key, Date.now() - req.requestStartTime);
         return;
