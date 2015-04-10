@@ -49,6 +49,7 @@ app.use(cookieParser());
 var RE_JUST_STAGE = /^http:\/\/([a-zA-Z]+)stage.textalk.se/;
 var RE_DOMAIN_THEN_STAGE = /^http:\/\/.*(\.[a-zA-Z]+stage.textalk.se)/;
 
+// Recursive Url.get, with stage rewrite.
 var pageUrlInfo = function(url, req, dontCatch) {
   //Always use http when querying the Url API
   url = url.replace('https://', 'http://');
@@ -92,50 +93,9 @@ var pageUrlInfo = function(url, req, dontCatch) {
   return promise;
 };
 
-app.get('/favicon.ico', function(req, res) {
-  res.status(404).send('');
-});
-
-app.get('/backend/ha/check.txt', function(req, res) {
-  res.send('ok');
-});
-
-app.get('/backend/stats/cache.txt', function(req, res) {
-  var keys = cache.keys();
-  res.send('Nr of keys: ' + keys.length + '\n' + JSON.stringify(keys, undefined, 2));
-});
-
-/**
- * Support old style tws-theme css
- */
-app.get('/css/*', function(req, res) {
-  var key = 'CSS:' + req.url;
-  if (cache.has(key)) {
-    res.setHeader('Content-Type', 'text/css');
-    res.send(cache.get(key));
-    return;
-  }
-
-  var url = config.diversityUrl + 'components/old-aficionado/*/css/' + req.url.substring(19);
-
-  var request = {
-    url: url,
-    charset: 'UTF-8',
-    method: 'GET',
-  };
-  return http.request(request).then(function(response) {
-    if (response.status !== 200) {
-      res.status(404).send('Not found.');
-    }
-
-    return response.body.read().then(function(r) {
-      res.setHeader('Content-Type', 'text/css');
-      res.send(r);
-      cache.set(key, r);
-    });
-  });
-});
-
+/****************************************
+ * Middleware                           *
+ ****************************************/
 
 // Handle queries on localhost
 app.use(function(req, res, next) {
@@ -187,6 +147,76 @@ app.use(function(req, res, next) {
   next();
 });
 
+
+
+// Parse possible theme_id cookie
+app.use(function(req, res, next) {
+  if (req.cookies['theme_id']) {
+    // Theme id can have a preview auth token
+    var split = req.cookies['theme_id'].split(';');
+    req.themeUid = parseInt(split[0], 10);
+    req.themeUid = isNaN(req.themeUid) ? undefined : req.themeUid;
+    req.auth = split[1]; // can be undefined, thats fine.
+    console.log(new Date(), req.incomingUrl, 'Theme id cookie', req.themeUid, req.auth);
+  }
+  next();
+});
+
+
+
+
+
+/*************************************
+ * Routes                            *
+ *************************************/
+
+app.get('/favicon.ico', function(req, res) {
+  res.status(404).send('');
+});
+
+app.get('/backend/ha/check.txt', function(req, res) {
+  res.send('ok');
+});
+
+app.get('/backend/stats/cache.txt', function(req, res) {
+  var keys = cache.keys();
+  res.send('Nr of keys: ' + keys.length + '\n' + JSON.stringify(keys, undefined, 2));
+});
+
+/**
+ * Support old style tws-theme css
+ */
+app.get('/css/*', function(req, res) {
+  var key = 'CSS:' + req.url;
+  if (cache.has(key)) {
+    res.setHeader('Content-Type', 'text/css');
+    res.send(cache.get(key));
+    return;
+  }
+
+  var url = config.diversityUrl + 'components/old-aficionado/*/css/' + req.url.substring(19);
+
+  var request = {
+    url: url,
+    charset: 'UTF-8',
+    method: 'GET',
+  };
+  return http.request(request).then(function(response) {
+    if (response.status !== 200) {
+      res.status(404).send('Not found.');
+    }
+
+    return response.body.read().then(function(r) {
+      res.setHeader('Content-Type', 'text/css');
+      res.send(r);
+      cache.set(key, r);
+    });
+  });
+});
+
+
+
+
 // TODO: refactor into middleware
 app.get('*', function(req, res) {
   req.requestStartTime = Date.now();
@@ -214,30 +244,18 @@ app.get('*', function(req, res) {
       });
     };
 
-    if (req.cookies['theme_id']) {
-      // Theme id can have a preview auth token
-      var split = req.cookies['theme_id'].split(';');
-      var themeId = parseInt(split[0], 10);
-      req.auth = split[1]; // can be undefined, thats fine.
-
-      // Don't use cache when previewing
-      if (req.auth) {
-        req.dontCache = true;
-      }
-
+    if (req.themeUid) {
       // Check cache
-      if (!isNaN(themeId)) {
-        var key = info.webshop + '/' + themeId + '/' + info.language;
-        if (!req.dontCache && cache.has(key)) {
-          res.send(cache.get(key));
-          console.log(new Date(), req.incomingUrl, 'Theme Cookie: Returning cached content for ', key, Date.now() - req.requestStartTime);
-          return 'cached';
-        }
+      var key = info.webshop + '/' + req.themeUid + '/' + info.language;
+      if (!req.auth && cache.has(key)) { // Don't cache when we have auth key
+        res.send(cache.get(key));
+        console.log(new Date(), req.incomingUrl, 'Theme Cookie: Returning cached content for ', key, Date.now() - req.requestStartTime);
+        return 'cached';
       }
 
       return api.call(
         'Theme.get',
-        [themeId],
+        [req.themeUid],
         {webshop: info.webshop, language: info.language, auth: req.auth, apiUrl: config.apiUrl}
       ).catch(themeSelect); //On error do a theme select
     } else {
@@ -255,7 +273,7 @@ app.get('*', function(req, res) {
 
     // Check cache.
     if (theme.uid) {
-      if (!req.dontCache && cache.has(req.key)) {
+      if (!req.auth && cache.has(req.key)) { // Don't cache when we have auth key
         res.send(cache.get(req.key));
         console.log(new Date(), req.incomingUrl, 'Returning cached content for ', req.key, Date.now() - req.requestStartTime);
         return;
