@@ -19,7 +19,7 @@ var cookieParser = require('cookie-parser');
 var compress = require('compression');
 
 if (process.argv[2] === '--help') {
-  console.log('Usage:\n     node diversity-prod.js [<config-file>]');
+  console.log(new Date(), req.incomingUrl, 'Usage:\n     node diversity-prod.js [<config-file>]');
   process.exit();
 }
 
@@ -49,7 +49,7 @@ app.use(cookieParser());
 var RE_JUST_STAGE = /^http:\/\/([a-zA-Z]+)stage.textalk.se/;
 var RE_DOMAIN_THEN_STAGE = /^http:\/\/.*(\.[a-zA-Z]+stage.textalk.se)/;
 
-var pageUrlInfo = function(url, dontCatch) {
+var pageUrlInfo = function(url, req, dontCatch) {
   //Always use http when querying the Url API
   url = url.replace('https://', 'http://');
 
@@ -66,16 +66,16 @@ var pageUrlInfo = function(url, dontCatch) {
       stage = RE_DOMAIN_THEN_STAGE.exec(url);
       url = url.replace(stage[1], '');
     }
-    console.log('Rewrote stage url to', url);
+    console.log(new Date(), req.incomingUrl, 'Rewrote stage url to', url);
   }
 
   var promise = api.call('Url.get', [url, true], {apiUrl: config.apiUrl}).then(function(info) {
     if (info.type === 'Moved') {
       if (url === info.url) {
-        console.log('Stopping page url loop');
+        console.log(new Date(), req.incomingUrl, 'Stopping page url loop');
         return Q.reject();
       }
-      return pageUrlInfo(info.url);
+      return pageUrlInfo(info.url, req);
     }
     info.shopUrl = url;
     return info;
@@ -85,8 +85,8 @@ var pageUrlInfo = function(url, dontCatch) {
     return promise.catch(function() {
       // If we err out we do another check, but this time with just the domain part.
       var parsed = Url.parse(url);
-      console.log('Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
-      return pageUrlInfo('http://' + parsed.hostname + '/', true);
+      console.log(new Date(), req.incomingUrl, 'Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
+      return pageUrlInfo('http://' + parsed.hostname + '/', req, true);
     });
   }
   return promise;
@@ -136,13 +136,19 @@ app.get('/css/*', function(req, res) {
   });
 });
 
+
 // Handle queries on localhost
 app.use(function(req, res, next) {
 
+  // For logging
+  req.incomingUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
+
   if (req.query.shopUrl) {
+    console.log(new Date(), req.incomingUrl, 'Shop override')
     req.urlOverride = Url.parse(req.query.shopUrl, true);
     req.shopUrl = req.urlOverride.protocol +'//'+ req.urlOverride.hostname + req.urlOverride.path;
   } else {
+    console.log(req.url, req.hostname)
     req.shopUrl = req.protocol +'://'+ req.hostname + req.url;
   }
 
@@ -154,7 +160,9 @@ app.use(function(req, res, next) {
 app.use(function(req, res, next) {
 
   // Check if we have previewkey req parameter
-  if (req.query.previewkey && req.query.theme_id){
+  console.log(new Date(), req.incomingUrl, 'Checking for previewkey', req.query.previewkey, req.query.theme_id);
+  if (req.query.previewkey && req.query.theme_id) {
+    console.log(new Date(), req.incomingUrl, 'Got previewkey, redirecting');
     res.cookie(
       'theme_id',
       req.query.theme_id + ';' + req.query.previewkey
@@ -185,7 +193,7 @@ app.get('*', function(req, res) {
   req.diversity = {};
 
   // First we checkout what webshop where on.
-  pageUrlInfo(req.shopUrl).then(function(info) {  // <-- in a middleware?
+  pageUrlInfo(req.shopUrl, req).then(function(info) {  // <-- in a middleware?
     req.shopUrl = info.shopUrl || req.shopUrl;
 
     //TODO: check if something whent wrong.
@@ -221,7 +229,7 @@ app.get('*', function(req, res) {
         var key = info.webshop + '/' + themeId + '/' + info.language;
         if (!req.dontCache && cache.has(key)) {
           res.send(cache.get(key));
-          console.log('Theme Cookie: Returning cached content for ', key, Date.now() - req.requestStartTime);
+          console.log(new Date(), req.incomingUrl, 'Theme Cookie: Returning cached content for ', key, Date.now() - req.requestStartTime);
           return 'cached';
         }
       }
@@ -248,7 +256,7 @@ app.get('*', function(req, res) {
     if (theme.uid) {
       if (!req.dontCache && cache.has(req.key)) {
         res.send(cache.get(req.key));
-        console.log('Returning cached content for ', req.key, Date.now() - req.requestStartTime);
+        console.log(new Date(), req.incomingUrl, 'Returning cached content for ', req.key, Date.now() - req.requestStartTime);
         return;
       }
     }
@@ -310,7 +318,7 @@ app.get('*', function(req, res) {
               ).then(function(data) {
                 templates[json.name] = data;
               }, function() {
-                //console.log('Could not load template for ', json.name);
+                //console.log(new Date(), req.incomingUrl, 'Could not load template for ', json.name);
               })
             );
           }
@@ -326,7 +334,7 @@ app.get('*', function(req, res) {
                 translations[json.name] = data;
               }, function() {
                 // Errors here sould not stop all loading.
-                //console.log('Could not load translation for ', json.name);
+                //console.log(new Date(), req.incomingUrl, 'Could not load translation for ', json.name);
               })
             );
           }
@@ -424,11 +432,11 @@ app.get('*', function(req, res) {
       res.send(html);
 
       cache.set(req.key, html);
-      console.log('Returning renderered content for ',req.url, req.key, Date.now() - req.requestStartTime);
+      console.log(new Date(), req.incomingUrl, 'Returning renderered content for ',req.url, req.key, Date.now() - req.requestStartTime);
     });
 
   }).catch(function(err) {
-    console.log("Returning 500: ", req.url, err);
+    console.log(new Date(), req.incomingUrl, "Returning 500: ", err);
     res.status(500).send('<!doctype html><html lang="en"><head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>Internal Server Error</title> <link href="http://fonts.googleapis.com/css?family=Droid+Sans" rel="stylesheet" type="text/css"> <style>html, body{background: #333; color: #fefefe; font-size: 22px; font-family: "Droid Sans", Verdana, Geneva, sans-serif;}body{padding: 25px; text-align: center;}</style></head><body> <h1>Internal Server Error (500)</h1> <h3>We are sorry, but something has gone really wrong.</h3> <p> Rest assured that we have logged the error and are looking into it as soon as possible.<br/> Try reloading the page in a little while. </p></body></html>');
   });
 });
