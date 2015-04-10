@@ -69,7 +69,7 @@ var pageUrlInfo = function(url, req, dontCatch) {
     console.log(new Date(), req.incomingUrl, 'Rewrote stage url to', url);
   }
 
-  var promise = api.call('Url.get', [url, true], {apiUrl: config.apiUrl}).then(function(info) {
+  var promise = api.call('Url.get', [url, true], {apiUrl: config.apiUrl, auth: req.auth}).then(function(info) {
     if (info.type === 'Moved') {
       if (url === info.url) {
         console.log(new Date(), req.incomingUrl, 'Stopping page url loop');
@@ -209,7 +209,8 @@ app.get('*', function(req, res) {
         apiUrl: config.apiUrl,
         webshop: info.webshop,
         language: info.language,
-        headers: headers
+        headers: headers,
+        auth: req.auth
       });
     };
 
