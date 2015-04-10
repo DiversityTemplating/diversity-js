@@ -49,6 +49,60 @@ app.use(cookieParser());
 var RE_JUST_STAGE = /^http:\/\/([a-zA-Z]+)stage.textalk.se/;
 var RE_DOMAIN_THEN_STAGE = /^http:\/\/.*(\.[a-zA-Z]+stage.textalk.se)/;
 
+
+/*************************************
+ * Static Routes                            *
+ *************************************/
+
+app.get('/favicon.ico', function(req, res) {
+  res.status(404).send('');
+});
+
+app.get('/backend/ha/check.txt', function(req, res) {
+  res.send('ok');
+});
+
+app.get('/backend/stats/cache.txt', function(req, res) {
+  var keys = cache.keys();
+  res.send('Nr of keys: ' + keys.length + '\n' + JSON.stringify(keys, undefined, 2));
+});
+
+
+
+
+/**
+ * Support old style tws-theme css
+ */
+app.get('/css/*', function(req, res) {
+  var key = 'CSS:' + req.url;
+  if (cache.has(key)) {
+    res.setHeader('Content-Type', 'text/css');
+    res.send(cache.get(key));
+    return;
+  }
+
+  var url = config.diversityUrl + 'components/old-aficionado/*/css/' + req.url.substring(19);
+
+  var request = {
+    url: url,
+    charset: 'UTF-8',
+    method: 'GET',
+  };
+  return http.request(request).then(function(response) {
+    if (response.status !== 200) {
+      res.status(404).send('Not found.');
+    }
+
+    return response.body.read().then(function(r) {
+      res.setHeader('Content-Type', 'text/css');
+      res.send(r);
+      cache.set(key, r);
+    });
+  });
+});
+
+
+
 // Recursive Url.get, with stage rewrite.
 var pageUrlInfo = function(url, req, dontCatch) {
   //Always use http when querying the Url API
@@ -164,58 +218,9 @@ app.use(function(req, res, next) {
 
 
 
-
-
-/*************************************
- * Routes                            *
- *************************************/
-
-app.get('/favicon.ico', function(req, res) {
-  res.status(404).send('');
-});
-
-app.get('/backend/ha/check.txt', function(req, res) {
-  res.send('ok');
-});
-
-app.get('/backend/stats/cache.txt', function(req, res) {
-  var keys = cache.keys();
-  res.send('Nr of keys: ' + keys.length + '\n' + JSON.stringify(keys, undefined, 2));
-});
-
-/**
- * Support old style tws-theme css
- */
-app.get('/css/*', function(req, res) {
-  var key = 'CSS:' + req.url;
-  if (cache.has(key)) {
-    res.setHeader('Content-Type', 'text/css');
-    res.send(cache.get(key));
-    return;
-  }
-
-  var url = config.diversityUrl + 'components/old-aficionado/*/css/' + req.url.substring(19);
-
-  var request = {
-    url: url,
-    charset: 'UTF-8',
-    method: 'GET',
-  };
-  return http.request(request).then(function(response) {
-    if (response.status !== 200) {
-      res.status(404).send('Not found.');
-    }
-
-    return response.body.read().then(function(r) {
-      res.setHeader('Content-Type', 'text/css');
-      res.send(r);
-      cache.set(key, r);
-    });
-  });
-});
-
-
-
+/*****************************
+ * Main route                *
+ *****************************/
 
 // TODO: refactor into middleware
 app.get('*', function(req, res) {
