@@ -209,10 +209,10 @@ app.get('*', function(req, res) {
       // Theme id can have a preview auth token
       var split = req.cookies['theme_id'].split(';');
       var themeId = parseInt(split[0], 10);
-      var auth = split[1]; // can be undefined, thats fine.
+      req.auth = split[1]; // can be undefined, thats fine.
 
       // Don't use cache when previewing
-      if (auth) {
+      if (req.auth) {
         req.dontCache = true;
       }
 
@@ -229,7 +229,7 @@ app.get('*', function(req, res) {
       return api.call(
         'Theme.get',
         [themeId],
-        {webshop: info.webshop, language: info.language, auth: auth, apiUrl: config.apiUrl}
+        {webshop: info.webshop, language: info.language, auth: req.auth, apiUrl: config.apiUrl}
       ).catch(themeSelect); //On error do a theme select
     } else {
       return themeSelect();
@@ -369,7 +369,8 @@ app.get('*', function(req, res) {
         config.apiUrl,
         req.swsUrl,
         config.diversityUrl,
-        components[req.theme.params.component]
+        components[req.theme.params.component],
+        req.auth
       );
       var prefix = render.prefixFactory(config.diversityUrl);
 
