@@ -63,7 +63,6 @@ var staticRoutes = {
 
 // Recursive Url.get, with stage rewrite.
 var pageUrlInfo = function(url, req, dontCatch) {
-  console.log('pageUrlInfo', url, req, dontCatch)
   // Handle stage url:s
   if (url.indexOf('stage.textalk.se') !== -1) {
     // Lets rewrite it!
