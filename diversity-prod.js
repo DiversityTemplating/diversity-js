@@ -11,6 +11,7 @@ var api        = require('./lib/api.js');
 var diversity  = require('./lib/diversity.js');
 var render     = require('./lib/render.js');
 var cookieParser = require('cookie-parser');
+var raven      = require('raven');
 
 var compress = require('compression');
 
@@ -39,6 +40,21 @@ config.port         = config.port         || process.env.PORT || 3030;
 // Set up simple lru page caching
 var cache = LRU({max: 2000, maxAge: config.cacheTTL});
 
+
+// Set up logging
+var ravenClient = {
+  captureMessage: function() {}
+};
+
+if (config.sentryDSN) {
+  ravenClient = new raven.Client(config.sentryDSN);
+
+  ravenClient.patchGlobal(function(e) {
+    console.log('Crashed and burned', e);
+    process.exit(1);
+  });
+}
+
 app.use(compress());
 
 var RE_JUST_STAGE = /^http:\/\/([a-zA-Z]+)stage.textalk.se/;
@@ -63,6 +79,11 @@ var staticRoutes = {
 
 // Recursive Url.get, with stage rewrite.
 var pageUrlInfo = function(url, req, dontCatch) {
+
+  if (!req.pageUrlInfoLog) {
+    req.pageUrlInfoLog = [];
+  }
+
   // Handle stage url:s
   if (url.indexOf('stage.textalk.se') !== -1) {
     // Lets rewrite it!
@@ -76,10 +97,12 @@ var pageUrlInfo = function(url, req, dontCatch) {
       stage = RE_DOMAIN_THEN_STAGE.exec(url);
       url = url.replace(stage[1], '');
     }
+    req.pageUrlInfoLog.push(req.incomingUrl + ' rewritten to ' + url);
     console.log(new Date(), req.incomingUrl, 'Rewrote stage url to', url);
   }
 
   var promise = api.call('Url.get', [url, true], {apiUrl: config.apiUrl, auth: req.auth}).then(function(info) {
+    req.pageUrlInfoLog.push(info);
     if (info.type === 'Moved') {
       if (url === info.url || info.url === req.incomingUrl) {
         console.log(new Date(), req.incomingUrl, 'Stopping page url loop');
@@ -107,6 +130,20 @@ var pageUrlInfo = function(url, req, dontCatch) {
 var error = function(err, req, res) {
   console.log(new Date(), req.incomingUrl, 'Returning 500: ', err);
   res.status(500).send('<!doctype html><html lang="en"><head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>Internal Server Error</title> <link href="http://fonts.googleapis.com/css?family=Droid+Sans" rel="stylesheet" type="text/css"> <style>html, body{background: #333; color: #fefefe; font-size: 22px; font-family: "Droid Sans", Verdana, Geneva, sans-serif;}body{padding: 25px; text-align: center;}</style></head><body> <h1>Internal Server Error (500)</h1> <h3>We are sorry, but something has gone really wrong.</h3> <p> Rest assured that we have logged the error and are looking into it as soon as possible.<br/> Try reloading the page in a little while. </p></body></html>');
+
+  var kwargs = raven.parsers.parseRequest(req);
+  kwargs.extra = {
+    incomingUrl: req.incomingUrl,
+    shopUrl: req.shopUrl,
+    webshop: req.webshop,
+    language: req.language,
+    auth: req.auth,
+    error: err
+  };
+  kwargs.tags = {response: '500'};
+  kwargs.level = 'error';
+
+  ravenClient.captureMessage('500', kwargs);
 };
 
 /****************************************
@@ -186,9 +223,19 @@ app.use(function(req, res, next) {
   }, function() {
     // No page? 404
     res.status(404).send('<!doctype html><html lang="en"><head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>Page Not Found</title> <link href="http://fonts.googleapis.com/css?family=Droid+Sans" rel="stylesheet" type="text/css"> <style>html, body{background: #333; color: #fefefe; font-size: 22px; font-family: "Droid Sans", Verdana, Geneva, sans-serif;}body{padding: 25px; text-align: center;}</style></head><body> <h1>Page Not Found (404)</h1> <h3>We are sorry, but we could not find the page you are looking for.</h3></body></html>');
+
+    var kwargs = raven.parsers.parseRequest(req);
+    kwargs.extra = {
+      incomingUrl: req.incomingUrl,
+      shopUrl: req.shopUrl,
+      headers: req.headers,
+      pageUrlInfoLog: req.pageUrlInfoLog
+    };
+    kwargs.tags = {response: '404'};
+    kwargs.level = 'warning';
+    ravenClient.captureMessage('404 ' + req.incomingUrl, kwargs);
   });
 });
-
 
 // Theme get/Select
 app.use(function(req, res, next) {
@@ -388,18 +435,33 @@ app.get('*', function(req, res) {
         }).concat(context.styles);
       }
 
-      if (typeof comp.script === 'string') {
-        context.scripts.unshift(prefix(comp.name, comp.version, comp.script));
-      } else if (typeof comp.script !== 'undefined') {
-        context.scripts = comp.script.map(function(u) {
-          return prefix(comp.name, comp.version, u);
-        }).concat(context.scripts);
+      // Scripts can be servered minfied from the diversity api server
+      // In that case we need a large URL, otherwise we need to gather scripts
+      if (!config.minifiedJs) {
+        // The non minified way of one script at a time.
+        if (typeof comp.script === 'string') {
+          context.scripts.unshift(prefix(comp.name, comp.version, comp.script));
+        } else if (typeof comp.script !== 'undefined') {
+          context.scripts = comp.script.map(function(u) {
+            return prefix(comp.name, comp.version, u);
+          }).concat(context.scripts);
+        }
+      } else {
+        //The new way, one large url.
+        if (comp.script) {
+          context.scripts.unshift(comp.name + '=' + comp.version);
+        }
       }
 
       if (comp.angular) {
         context.modules[comp.angular] = true;
       }
     });
+
+    // Create one large minfied url if it's configed
+    if (config.minifiedJs) {
+      context.scripts = [config.diversityUrl + 'minify-js?' + context.scripts.join('&')];
+    }
 
     // Filter out scss files.
     var re = /.*\.scss$/;
@@ -428,7 +490,7 @@ app.get('*', function(req, res) {
     var html = render.renderMustache(templates[req.theme.params.component], context, req.language);
     res.send(html);
 
-    cache.set(req.key, html);
+    //cache.set(req.key, html);
     console.log(new Date(), req.incomingUrl, 'Returning renderered content for ',req.url, req.key, Date.now() - req.requestStartTime);
   }).catch(function(err) {
     error(err, req, res);
