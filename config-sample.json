@@ -1,0 +1,9 @@
+{
+  "diversityUrl": "http://raoulstage.textalk.se:10088/",
+  "apiUrl": "shop.textalk.se/backend/jsonrpc/v1/",
+  "cacheTTL": 1000,
+  "swsUrlOld": "/css/",
+  "port": 3000,
+  "minifiedJs": true,
+  "sentryDSN": "http://blablabla"
+}
