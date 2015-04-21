@@ -101,7 +101,7 @@ var pageUrlInfo = function(url, req, dontCatch) {
     console.log(new Date(), req.incomingUrl, 'Rewrote stage url to', url);
   }
 
-  var promise = api.call('Url.get', [url, true], {apiUrl: config.apiUrl, auth: req.auth}).then(function(info) {
+  var promise = api.call('Url.get', [url, true], {apiUrl: req.apiUrl, auth: req.auth}).then(function(info) {
     req.pageUrlInfoLog.push(info);
     if (info.type === 'Moved') {
       if (url === info.url || info.url === req.incomingUrl) {
@@ -167,6 +167,24 @@ app.use(function(req, res, next) {
   req.incomingUrl = 'http://' + req.hostname + req.url;
   req.requestStartTime = Date.now();
 
+  next();
+});
+
+// Stage check
+app.use(function(req, res, next) {
+  // The default
+  req.apiUrl = config.apiUrl;
+
+  if (req.hostname.indexOf('stage.textalk.se') !== -1) {
+    // Used for logging
+    var m = RE_DOMAIN_THEN_STAGE.exec('http://' + req.hostname);
+    if (m && m[1]) {
+
+      // Force http on stage
+      req.apiUrl = 'http://' + m[1].substring(1) + '/backend/jsonrpc/v1/';
+    }
+    req.isStage = true;
+  }
   next();
 });
 
@@ -245,7 +263,7 @@ app.use(function(req, res, next) {
        headers['user-agent'] = 'Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/19.0.1084.60 Mobile/9B206 Safari/7534.48.3';
     }
     api.call('Theme.select', true, {
-      apiUrl: config.apiUrl,
+      apiUrl: req.apiUrl,
       webshop: req.webshop,
       language: req.language,
       headers: headers,
@@ -271,7 +289,7 @@ app.use(function(req, res, next) {
     api.call(
       'Theme.get',
       [req.themeUid],
-      {webshop: req.webshop, language: req.language, auth: req.auth, apiUrl: config.apiUrl}
+      {webshop: req.webshop, language: req.language, auth: req.auth, apiUrl: req.apiUrl}
     ).then(function(theme) {
       req.theme = theme;
       next();
@@ -407,7 +425,7 @@ app.get('*', function(req, res) {
       // findComponentsInSettings goes depth first and applies children before parents
       var def = components[obj.component];
       if (def.template) {
-        var c = render.createContext(req.webshop, webshopUrl, config.apiUrl, req.swsUrl, config.diversityUrl, def);
+        var c = render.createContext(req.webshop, webshopUrl, req.apiUrl, req.swsUrl, config.diversityUrl, def);
         c.settings = obj.settings || {};
         c.settingsJSON = JSON.stringify(c.settings).replace(/<\/script>/g, '<\\/script>');
         obj.componentHTML = render.renderMustache(templates[obj.component], c, req.language);
@@ -418,7 +436,7 @@ app.get('*', function(req, res) {
     var context = render.createContext(
       req.webshop,
       webshopUrl,
-      config.apiUrl,
+      req.apiUrl,
       req.swsUrl,
       config.diversityUrl,
       components[req.theme.params.component],
