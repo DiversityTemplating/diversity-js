@@ -90,7 +90,9 @@ var pageUrlInfo = function(url, req, dontCatch) {
     // someonestage.textalk.se -> jenkinsstage.textalk.se
     var stage = RE_JUST_STAGE.exec(url);
     if (stage) {
-      url = url.replace(stage[1], 'jenkins');
+
+      // This was old.... don't do this
+      //url = url.replace(stage[1], 'jenkins');
     } else {
       // or
       // shop.heynicebeard.com.someonestage.textalk.se -> shop.heynicebeard.com
