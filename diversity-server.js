@@ -235,13 +235,13 @@ Q.all([
         // Render mustache templates for each in the list.
         renderList.forEach(function(obj, i) {
 
-          var c = render.createContext(webshopUid, webshopUrl);
+          var c = render.createContext(webshopUid, webshopUrl, auth);
           c.settings = obj.settings || {};
           c.settingsJSON = JSON.stringify(c.settings).replace(/<\/script>/g, '<\\/script>');
           obj.componentHTML = render.renderMustache(templateData[i], c);
         });
 
-        var context = render.createContext(webshopUid, webshopUrl);
+        var context = render.createContext(webshopUid, webshopUrl, auth);
         var prefix = render.prefixFactory(deps.DEPS_FOLDER);
 
         util.traverseDeps(names, defs, function(comp) {
