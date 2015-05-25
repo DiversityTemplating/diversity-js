@@ -311,6 +311,10 @@ app.use(function(err, req, res, next) {
  * Main route                *
  *****************************/
 // TODO: refactor into middleware
+
+var CLEAN_RE = /[\^~]*/;
+var VERSION_RE = /^[0-9.]+$/;
+
 app.get('*', function(req, res) {
   var theme = req.theme;
   req.key = req.webshop + '/' + theme.uid + '/' + req.language;
@@ -336,10 +340,13 @@ app.get('*', function(req, res) {
     req.swsUrl = config.diversityUrl;
   }
 
-  // Until api handles ^ versions we go with *
+  // Diversity API don't take semver, but 1.0 will parsed as the latest patch, wich we want.
+  // but just in the case of the theme component
+  var cleanVersion = (theme.params.version || '').replace(CLEAN_RE, '');
+  //console.log('Clean version is ' + cleanVersion, 'was', theme.params.version);
   var componentsToLoad = [{
     component: theme.params.component,
-    version: '*' //theme.params.version || '*'
+    version: VERSION_RE.test(cleanVersion) ? cleanVersion : '*'
   }];
 
   // Until api handles ^ versions we go with *
