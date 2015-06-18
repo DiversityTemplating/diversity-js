@@ -429,12 +429,18 @@ app.get('*', function(req, res) {
   return Q.all(componentsToLoad.map(loadComponent)).then(function() {
     var webshopUrl = req.shopUrl;
 
+    // Is this a prerender run?
+    var prerender = false;
+    if (req.headers['user-agent'] && req.headers['user-agent'].indexOf('Prerender') !== -1) {
+      prerender = true;
+    }
+
     // Time to render templates
     util.findComponentsInSettings(req.theme.params.settings || {}, function(obj) {
       // findComponentsInSettings goes depth first and applies children before parents
       var def = components[obj.component];
       if (def.template) {
-        var c = render.createContext(req.webshop, webshopUrl, req.apiUrl, req.swsUrl, config.diversityUrl, def);
+        var c = render.createContext(req.webshop, webshopUrl, req.apiUrl, req.swsUrl, config.diversityUrl, def, prerender);
         c.settings = obj.settings || {};
         c.settingsJSON = JSON.stringify(c.settings).replace(/<\/script>/g, '<\\/script>');
         obj.componentHTML = render.renderMustache(templates[obj.component], c, req.language);
