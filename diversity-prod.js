@@ -261,7 +261,7 @@ app.use(function(req, res, next) {
 app.use(function(req, res, next) {
   var themeSelect = function() {
     var headers = {'user-agent': req.headers['user-agent']};
-    if (headers['user-agent'].indexOf('Prerender')) {
+    if (headers['user-agent'].indexOf('Prerender') !== -1) {
        headers['user-agent'] = 'Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/19.0.1084.60 Mobile/9B206 Safari/7534.48.3';
     }
     api.call('Theme.select', true, {
@@ -440,7 +440,7 @@ app.get('*', function(req, res) {
       // findComponentsInSettings goes depth first and applies children before parents
       var def = components[obj.component];
       if (def.template) {
-        var c = render.createContext(req.webshop, webshopUrl, req.apiUrl, req.swsUrl, config.diversityUrl, def, prerender);
+        var c = render.createContext(req.webshop, webshopUrl, req.apiUrl, req.swsUrl, config.diversityUrl, def, undefined, prerender);
         c.settings = obj.settings || {};
         c.settingsJSON = JSON.stringify(c.settings).replace(/<\/script>/g, '<\\/script>');
         obj.componentHTML = render.renderMustache(templates[obj.component], c, req.language);
