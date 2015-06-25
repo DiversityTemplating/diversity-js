@@ -326,7 +326,8 @@ app.use(function(req, res, next) {
 });
 
 // Error handling middleware
-app.use(function(err, req, res) {
+// Don't remove 'next' or express doesn't know what it is.
+app.use(function(err, req, res, next) { // jshint ignore:line
   error(err, req, res);
 });
 
