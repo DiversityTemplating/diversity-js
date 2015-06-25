@@ -190,12 +190,38 @@ app.use(function(req, res, next) {
   next();
 });
 
+// Handle theme_id busting.
+// The problem is that HA Proxy redirects to Diversity if a theme_id cookie is present
+// effectively stopping us from previewing classic templates.
+// If we get a  `theme=classic request parameter we kill the cookie and redirect to ourselves
+// so that the HA proxy can do it's thing.
+app.use(function(req, res, next) {
+  if (req.query.theme === 'classic') {
+    console.log(new Date(), req.incomingUrl, 'Got theme=classic, redirecting');
+
+    var url = req.path;
+    delete req.query.theme;
+    res.clearCookie('theme_id');
+
+    var query = Object.keys(req.query).map(function(name) {
+      return name + '=' + req.query[name];
+    }).join('&');
+
+    if (query.length > 0) {
+      url += '?' + query;
+    }
+    res.redirect(url);
+    return;
+  }
+  next();
+});
+
 // Handle redirects on previewkey request parameters
 app.use(function(req, res, next) {
   // Check if we have previewkey req parameter
-  if (req.originalUrl !== '/backend/ha/check.txt') {
-    console.log(new Date(), req.incomingUrl, 'Checking for previewkey', req.query.previewkey, req.query.theme_id, req.get('Cookie'));
-  }
+  //if (req.originalUrl !== '/backend/ha/check.txt') {
+  //  console.log(new Date(), req.incomingUrl, 'Checking for previewkey', req.query.previewkey, req.query.theme_id, req.get('Cookie'));
+  //}
   if (req.query.previewkey && req.query.theme_id) {
     console.log(new Date(), req.incomingUrl, 'Got previewkey, redirecting');
     res.cookie(
@@ -204,12 +230,10 @@ app.use(function(req, res, next) {
     );
 
     var url = req.path;
-
     delete req.query.previewkey;
     delete req.query.theme_id;
 
     var query = Object.keys(req.query).map(function(name) {
-
       return name + '=' + req.query[name];
     }).join('&');
 
@@ -302,7 +326,7 @@ app.use(function(req, res, next) {
 });
 
 // Error handling middleware
-app.use(function(err, req, res, next) {
+app.use(function(err, req, res) {
   error(err, req, res);
 });
 
@@ -530,7 +554,7 @@ app.get('*', function(req, res) {
   });
 });
 
-console.log('Starting server')
+console.log('Starting server');
 var server = app.listen(config.port, function() {
   console.log('Listening on port %d', server.address().port);
 });
