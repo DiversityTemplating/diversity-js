@@ -64,10 +64,14 @@ var RE_DOMAIN_THEN_STAGE = /^http:\/\/.*(\.[a-zA-Z]+stage.textalk.se)/;
 /*************************************
  * Static Routes                     *
  *************************************/
+var a404 = function(req, res) {
+  res.status(404).send('');
+};
+
 var staticRoutes = {
-  '/favicon.ico': function(req, res) {
-    res.status(404).send('');
-  },
+  '/apple-touch-icon.png': a404,
+  '/apple-touch-icon-precomposed.png': a404,
+  '/favicon.ico': a404,
   '/backend/ha/check.txt': function(req, res) {
     res.send('ok');
   },
@@ -78,55 +82,69 @@ var staticRoutes = {
 };
 
 // Recursive Url.get, with stage rewrite.
-var pageUrlInfo = function(url, req, dontCatch) {
-
+var pageUrlInfo = function(url, req) {
   if (!req.pageUrlInfoLog) {
     req.pageUrlInfoLog = [];
   }
 
-  // Handle stage url:s
-  if (url.indexOf('stage.textalk.se') !== -1) {
-    // Lets rewrite it!
-    // someonestage.textalk.se -> jenkinsstage.textalk.se
-    var stage = RE_JUST_STAGE.exec(url);
-    if (stage) {
+  var logLoop = function(msg) {
+    var kwargs = raven.parsers.parseRequest(req);
+    kwargs.extra = {
+      incomingUrl: req.incomingUrl,
+      shopUrl: req.shopUrl,
+      headers: req.headers,
+      pageUrlInfoLog: req.pageUrlInfoLo
+    };
+    kwargs.level = 'warning';
+    ravenClient.captureMessage(msg + ' ' + req.incomingUrl, kwargs);
+  };
 
-      // This was old.... don't do this
-      //url = url.replace(stage[1], 'jenkins');
-    } else {
-      // or
-      // shop.heynicebeard.com.someonestage.textalk.se -> shop.heynicebeard.com
-      stage = RE_DOMAIN_THEN_STAGE.exec(url);
-      url = url.replace(stage[1], '');
+
+  var deferred = Q.defer();
+  var recursiveUrlGet = function(currentUrl, opts, depth) {
+    if (depth <= 0) {
+      logLoop('Stopping too deep Url moved structure or loop');
+      return Q.reject('Stopping Url.get loop, to many queries', currentUrl);
     }
-    req.pageUrlInfoLog.push(req.incomingUrl + ' rewritten to ' + url);
-    console.log(new Date(), req.incomingUrl, 'Rewrote stage url to', url);
-  }
 
-  var promise = api.call('Url.get', [url, true], {apiUrl: req.apiUrl, auth: req.auth}).then(function(info) {
-    req.pageUrlInfoLog.push(info);
-    if (info.type === 'Moved') {
-      if (url === info.url || info.url === req.incomingUrl) {
-        console.log(new Date(), req.incomingUrl, 'Stopping page url loop');
-        return Q.reject();
+    return api.call('Url.get', [currentUrl, true], opts).then(function(info) {
+      req.pageUrlInfoLog.push(info);
+      if (info.type === 'Moved') {
+        if (url === info.url || info.url === req.incomingUrl) {
+          console.log(new Date(), req.incomingUrl, 'Stopping page url loop');
+          logLoop('Stopping Url "moved" loop');
+          return Q.reject('loop');
+        }
+
+        return recursiveUrlGet(info.url, opts, depth - 1);
       }
-      return pageUrlInfo(info.url, req);
-    }
-    req.shopUrl  = url;
-    req.language = info.language;
-    req.webshop  = info.webshop;
-    return info;
-  });
+      req.shopUrl  = url;
+      req.language = info.language;
+      req.webshop  = info.webshop;
+      return info;
+    });
+  };
 
-  if (!dontCatch) {
-    return promise.catch(function() {
-      // If we err out we do another check, but this time with just the domain part.
+  recursiveUrlGet(url, {apiUrl: req.apiUrl, auth: req.auth}, 5).then(function(info) {
+    deferred.resolve(info);
+  }, function(err) {
+    if (err && err.code === 9003) {
+      // Ok we couldn't find the url, let's try the domain part.
       var parsed = Url.parse(url);
       console.log(new Date(), req.incomingUrl, 'Url.get failed ', url, 'so we are trying ', 'http://' + parsed.hostname + '/');
-      return pageUrlInfo('http://' + parsed.hostname + '/', req, true);
-    });
-  }
-  return promise;
+
+      recursiveUrlGet('http://' + parsed.hostname + '/', {apiUrl: req.apiUrl, auth: req.auth}, 5).then(function(info) {
+        deferred.resolve(info);
+      }).catch(function(err) {
+        deferred.reject(err);
+      });
+
+    } else {
+      deferred.reject(err);
+    }
+  });
+
+  return deferred.promise;
 };
 
 var error = function(err, req, res) {
@@ -264,7 +282,8 @@ app.use(function(req, res, next) {
 app.use(function(req, res, next) {
   pageUrlInfo(req.incomingUrl, req).then(function() {
     next();
-  }, function() {
+  }, function(err) {
+
     // No page? 404
     res.status(404).send('<!doctype html><html lang="en"><head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>Page Not Found</title> <link href="http://fonts.googleapis.com/css?family=Droid+Sans" rel="stylesheet" type="text/css"> <style>html, body{background: #333; color: #fefefe; font-size: 22px; font-family: "Droid Sans", Verdana, Geneva, sans-serif;}body{padding: 25px; text-align: center;}</style></head><body> <h1>Page Not Found (404)</h1> <h3>We are sorry, but we could not find the page you are looking for.</h3></body></html>');
 
@@ -273,7 +292,8 @@ app.use(function(req, res, next) {
       incomingUrl: req.incomingUrl,
       shopUrl: req.shopUrl,
       headers: req.headers,
-      pageUrlInfoLog: req.pageUrlInfoLog
+      pageUrlInfoLog: req.pageUrlInfoLog,
+      error: err
     };
     kwargs.tags = {response: '404'};
     kwargs.level = 'warning';
