@@ -118,7 +118,7 @@ var pageUrlInfo = function(url, req) {
 
         return recursiveUrlGet(info.url, opts, depth - 1);
       }
-      req.shopUrl  = url;
+      req.shopUrl  = currentUrl;
       req.language = info.language;
       req.webshop  = info.webshop;
       return info;
