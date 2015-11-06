@@ -5,7 +5,7 @@ var fs         = require('q-io/fs');
 var path       = require('path');
 var bodyParser = require('body-parser');
 var express    = require('express');
-var tinylr     = require('tiny-lr');
+// var tinylr     = require('tiny-lr');
 var app        = express();
 
 var util       = require('./lib/util.js');
@@ -32,14 +32,12 @@ var auth = process.argv[4];
 
 var api = apiFactory(webshopUid, 'sv', auth);
 
-
 //ZGF2aWRAdGV4dGFsay5zZTsxNDEyMzIyNTIyO2EwOTJkOTJiNDlkNGYzN2I0ZmMxMjI2ZGI2NmU5MTg3
 
 app.use(bodyParser.json());
 app.use(express.static('.'));
 
-
-app.use(function (req, res, next) {
+app.use(function(req, res, next) {
 
   // Skip /deps, those are files
   if (req.url.indexOf('/deps') === 0 ||
@@ -51,7 +49,7 @@ app.use(function (req, res, next) {
   var fetchThemeCompAndJson = function(name) {
     return deps.updateDeps({ // Since its not under webshop components we must give an url.
       name: name,
-      url: 'http://git.diversity.io/themes/' + name + '.git'
+      url: 'https://git.diversity.io/themes/' + name + '.git'
       // The second updateDeps actually loads diversity.json
     }).then(deps.updateDeps);
   };
@@ -94,11 +92,9 @@ app.use(function (req, res, next) {
   }
 });
 
-app.get('/favicon.ico', function(req, res){
+app.get('/favicon.ico', function(req, res) {
   res.status(404).send('');
 });
-
-
 
 Q.all([
   //deps.updateDeps('tws-admin-schema-form').fail(function(err) {
@@ -110,18 +106,17 @@ Q.all([
   //  url: 'https://github.com/Textalk/jquery.jsonrpcclient.js.git'
   //}),
 
-
   //deps.updateDeps({
   //  name: 'aficionado',
   //  url: 'http://git.diversity.io/themes/aficionado.git'
   //}),
 
-  api('Webshop.get', [webshopUid, {url:'sv'}]).then(function(result) {
+  api('Webshop.get', [webshopUid, {url: 'sv'}]).then(function(result) {
     webshopUrl = result.url.sv;
   })
 ]).then(function(res) {
 
-  console.log(res)
+  console.log(res);
 
   // app.get('/reset', function(req, res) {
   //   // Reset skip list
@@ -137,7 +132,6 @@ Q.all([
   //
   // });
 
-
   // Sass it up!
   app.get('/css/components/:component/:version/css', function(req, res) {
     console.log('********', req.params);
@@ -147,7 +141,8 @@ Q.all([
       return '$' + k + ': ' + req.query[k] + ';';
     });
 
-    var styles = typeof req.themeDiversityJson.style === 'string' ? [req.themeDiversityJson.style] : req.themeDiversityJson.style;
+    var styles = typeof req.themeDiversityJson.style === 'string' ? [req.themeDiversityJson.style]
+                                                                  : req.themeDiversityJson.style;
 
     // Filter out all scss files
     var re = /.+\.scss/;
@@ -159,17 +154,19 @@ Q.all([
     sass.render({
       data: data.join('\n'),
       includePaths: ['./deps/' + req.themeName],
-      success: function(result) {
-        res.set('Content-Type', 'text/css');
-        res.set('Cache-Control', 'public, max-age=300');
-        res.send(result.css);
-      },
-      error: function(err) {
-        console.log(new Date(), err);
-        res.status(500).send(err);
-      },
       outputStyle: 'nested',
       stats: stats
+    }, function(err, result) {
+      if (err) {
+        console.log(new Date(), err);
+        res.status(500).send(err);
+        return;
+      }
+
+      res.set('Content-Type', 'text/css');
+      res.set('Cache-Control', 'public, max-age=300');
+      res.send(result.css);
+
     });
   });
 
@@ -181,7 +178,7 @@ Q.all([
     }
     // We update dependencies and load theme each time so we always pick up changes.
     // This is for development people!
-    console.log(req.url, req.theme)
+    console.log(req.url, req.theme);
     var settings  = req.theme.params.settings;
 
     var defs = req.componentDefs;
@@ -270,7 +267,6 @@ Q.all([
         var re = /.*\.scss$/;
         context.styles = context.styles.filter(function(s) { return !re.test(s); });
 
-
         context.settings = settings;
 
         // Since settingsJSON is going up to the server we need to clean out redundant code.
@@ -306,7 +302,7 @@ Q.all([
     });
   });
 
-  console.log('Starting server')
+  console.log('Starting server');
   var server = app.listen(process.env.PORT || 3000, function() {
     console.log('Listening on port %d', server.address().port);
   });
